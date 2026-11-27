@@ -458,6 +458,10 @@ export function UpdateFeedClient({
     }
   };
 
+  const activeTotal =
+    activeTrack === "official" ? officialItems.length : rumorItems.length;
+  const relativeLastChecked = formatRelativeTime(lastSyncedAt, nowMs);
+
   return (
     <div className="min-h-screen pb-16">
       {/* Header */}
@@ -465,13 +469,20 @@ export function UpdateFeedClient({
         <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold tracking-tight text-white">
+              <span
+                translate="no"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold tracking-tight text-white"
+              >
                 IU
               </span>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              <h1
+                translate="no"
+                className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl"
+              >
                 Intelligence Update
               </h1>
               <span
+                translate="no"
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   evaluator.mode === "gemini"
                     ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
@@ -522,13 +533,14 @@ export function UpdateFeedClient({
               <span>
                 Last checked:{" "}
                 <strong
+                  key={relativeLastChecked}
                   suppressHydrationWarning
                   title={
                     lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("en-US") : undefined
                   }
                   className="font-medium text-slate-700"
                 >
-                  {formatRelativeTime(lastSyncedAt, nowMs)}
+                  {relativeLastChecked}
                 </strong>
               </span>
               <span className="inline-flex items-center gap-1.5 text-slate-500">
@@ -536,11 +548,15 @@ export function UpdateFeedClient({
                 <span>Auto-sync hourly · Auto-refresh every 5m</span>
               </span>
             </div>
-            <span>
+            <span key={`${activeTrack}-${filteredUpdates.length}-${activeTotal}`}>
               Showing{" "}
-              <strong className="font-semibold text-slate-800">{filteredUpdates.length}</strong>{" "}
+              <strong translate="no" className="font-semibold text-slate-800">
+                {filteredUpdates.length}
+              </strong>{" "}
               of{" "}
-              {activeTrack === "official" ? officialItems.length : rumorItems.length}
+              <span translate="no" className="font-medium text-slate-700">
+                {activeTotal}
+              </span>
             </span>
           </div>
         </div>
@@ -560,6 +576,7 @@ export function UpdateFeedClient({
               <ShieldCheck className="h-4 w-4" />
               <span>Official Updates</span>
               <span
+                translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "official"
                     ? "bg-white/15 text-white"
@@ -582,6 +599,7 @@ export function UpdateFeedClient({
               <Radar className="h-4 w-4" />
               <span>Rumor Radar</span>
               <span
+                translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "rumor"
                     ? "bg-white/20 text-white"
@@ -774,6 +792,7 @@ export function UpdateFeedClient({
                 >
                   <button
                     type="button"
+                    translate="no"
                     onClick={() => setSelectedVendor(isSelected ? "all" : vendor)}
                     className={`py-1 pl-3 text-xs font-medium ${
                       activeTrack === "official" ? "pr-1.5" : "pr-3"
@@ -872,6 +891,7 @@ export function UpdateFeedClient({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span
+                          translate="no"
                           className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold tracking-wide ${credStyle.className}`}
                         >
                           <CredIcon className="h-3 w-3" />
@@ -885,10 +905,13 @@ export function UpdateFeedClient({
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
                           {EVIDENCE_BASIS_LABELS[item.rumor.evidenceBasis]}
                         </span>
-                        <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                        <span
+                          translate="no"
+                          className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white"
+                        >
                           {item.vendor}
                         </span>
-                        <span className="text-xs font-medium text-slate-500">
+                        <span translate="no" className="text-xs font-medium text-slate-500">
                           {item.sourceName}
                         </span>
                       </div>
@@ -980,14 +1003,18 @@ export function UpdateFeedClient({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span
+                        translate="no"
                         className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold tracking-wide ${imp.className}`}
                       >
                         {imp.label}
                       </span>
-                      <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      <span
+                        translate="no"
+                        className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white"
+                      >
                         {item.vendor}
                       </span>
-                      <span className="text-xs font-medium text-slate-500">
+                      <span translate="no" className="text-xs font-medium text-slate-500">
                         {item.sourceName}
                       </span>
                     </div>
