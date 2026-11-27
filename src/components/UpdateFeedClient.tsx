@@ -10,6 +10,7 @@ import {
   Moon,
   Radar,
   Radio,
+  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -45,6 +46,7 @@ interface UpdateFeedClientProps {
   initialSyncLogs: SyncSourceReport[];
   sources: SourceConfig[];
   evaluator: EvaluatorInfo;
+  initialBuildId: string;
 }
 
 type ThemePreference = "system" | "light" | "dark";
@@ -162,11 +164,14 @@ export function UpdateFeedClient({
   initialSyncLogs,
   sources,
   evaluator: initialEvaluator,
+  initialBuildId,
 }: UpdateFeedClientProps) {
   const [updates, setUpdates] = useState<UpdateItem[]>(initialUpdates);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(initialLastSyncedAt);
   const [syncLogs, setSyncLogs] = useState<SyncSourceReport[]>(initialSyncLogs);
   const [evaluator, setEvaluator] = useState<EvaluatorInfo>(initialEvaluator);
+  const [availableBuildId, setAvailableBuildId] = useState<string | null>(null);
+  const [dismissedBuildId, setDismissedBuildId] = useState<string | null>(null);
 
   const [activeTrack, setActiveTrack] = useState<Track>("official");
 
@@ -255,11 +260,15 @@ export function UpdateFeedClient({
         syncLogs?: SyncSourceReport[];
         lastSyncedAt?: string | null;
         evaluator?: EvaluatorInfo;
+        buildId?: string;
       };
       if (Array.isArray(data.updates)) setUpdates(data.updates);
       if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
       if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
       if (data.evaluator) setEvaluator(data.evaluator);
+      if (data.buildId && initialBuildId && data.buildId !== initialBuildId) {
+        setAvailableBuildId(data.buildId);
+      }
       const now = Date.now();
       lastFetchedAtRef.current = now;
       setNowMs(now);
@@ -268,7 +277,7 @@ export function UpdateFeedClient({
     } finally {
       isPollingRef.current = false;
     }
-  }, []);
+  }, [initialBuildId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -453,6 +462,9 @@ export function UpdateFeedClient({
   const activeTotal =
     activeTrack === "official" ? officialItems.length : rumorItems.length;
   const relativeLastChecked = formatRelativeTime(lastSyncedAt, nowMs);
+  const showUpdateBanner = Boolean(
+    availableBuildId && availableBuildId !== dismissedBuildId
+  );
 
   return (
     <div className="min-h-screen pb-16">
@@ -1223,6 +1235,49 @@ export function UpdateFeedClient({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {showUpdateBanner && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2"
+        >
+          <div className="glass-modal flex items-center justify-between gap-3 rounded-2xl px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300">
+                <RefreshCw className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-50">
+                  New version available
+                </p>
+                <p className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Refresh to load the latest interface.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedBuildId(availableBuildId)}
+                aria-label="Dismiss update notice"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 transition hover:bg-black/[0.06] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { APP_BUILD_ID } from "@/lib/build-info";
 import { SOURCES } from "@/lib/sources";
 import { readStore } from "@/lib/storage";
 import { getRumorEvaluatorInfo } from "@/lib/summarizer";
@@ -65,13 +66,21 @@ export async function GET(request: NextRequest) {
 
   const vendors = Array.from(new Set(SOURCES.map((s) => s.vendor)));
 
-  return NextResponse.json({
-    updates: filtered,
-    lastSyncedAt: store.lastSyncedAt,
-    syncLogs: store.syncLogs,
-    total: filtered.length,
-    vendors,
-    sources: SOURCES,
-    evaluator,
-  });
+  return NextResponse.json(
+    {
+      updates: filtered,
+      lastSyncedAt: store.lastSyncedAt,
+      syncLogs: store.syncLogs,
+      total: filtered.length,
+      vendors,
+      sources: SOURCES,
+      evaluator,
+      buildId: APP_BUILD_ID,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
+  );
 }

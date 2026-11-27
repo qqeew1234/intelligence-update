@@ -1,4 +1,5 @@
 import { UpdateFeedClient } from "@/components/UpdateFeedClient";
+import { APP_BUILD_ID } from "@/lib/build-info";
 import { SOURCES } from "@/lib/sources";
 import { readStore } from "@/lib/storage";
 import { getRumorEvaluatorInfo } from "@/lib/summarizer";
@@ -15,6 +16,7 @@ export default async function HomePage() {
       initialSyncLogs={store.syncLogs}
       sources={SOURCES}
       evaluator={evaluator}
+      initialBuildId={APP_BUILD_ID}
     />
   );
 }
