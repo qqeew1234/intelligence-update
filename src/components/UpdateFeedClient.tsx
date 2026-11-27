@@ -582,7 +582,7 @@ export function UpdateFeedClient({
               className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
                 activeTrack === "official"
                   ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
-                  : "glass-inset text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-300 dark:hover:bg-white/[0.09]"
+                  : "bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/20 hover:bg-blue-500/15 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-400/25 dark:hover:bg-blue-500/20"
               }`}
             >
               <ShieldCheck className="h-4 w-4" />
@@ -592,7 +592,7 @@ export function UpdateFeedClient({
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "official"
                     ? "bg-white/20 text-white"
-                    : "bg-black/[0.06] text-neutral-700 dark:bg-white/[0.10] dark:text-neutral-200"
+                    : "bg-blue-600/12 text-blue-800 dark:bg-blue-400/20 dark:text-blue-100"
                 }`}
               >
                 {officialItems.length}
@@ -605,7 +605,7 @@ export function UpdateFeedClient({
               className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
                 activeTrack === "rumor"
                   ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
-                  : "glass-inset text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-300 dark:hover:bg-white/[0.09]"
+                  : "bg-amber-500/10 text-amber-800 ring-1 ring-amber-500/25 hover:bg-amber-500/15 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-400/25 dark:hover:bg-amber-500/20"
               }`}
             >
               <Radar className="h-4 w-4" />
@@ -615,7 +615,7 @@ export function UpdateFeedClient({
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "rumor"
                     ? "bg-white/20 text-white dark:bg-neutral-950/15 dark:text-neutral-950"
-                    : "bg-black/[0.06] text-neutral-700 dark:bg-white/[0.10] dark:text-neutral-200"
+                    : "bg-amber-600/12 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100"
                 }`}
               >
                 {rumorItems.length}
