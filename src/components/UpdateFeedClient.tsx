@@ -514,12 +514,13 @@ export function UpdateFeedClient({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <span
-                translate="no"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-900 text-xs font-bold tracking-tight text-white shadow-xs dark:bg-white dark:text-neutral-900"
-              >
-                IU
-              </span>
+              <img
+                src="/logo.png"
+                alt="Intelligence Update"
+                width={36}
+                height={36}
+                className="h-8 w-8 shrink-0 rounded-lg shadow-xs sm:h-9 sm:w-9"
+              />
               <h1
                 translate="no"
                 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-2xl"
