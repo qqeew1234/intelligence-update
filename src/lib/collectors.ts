@@ -3,7 +3,7 @@ import { compactWhitespace, sha256, stripHtml, toIsoDate } from "./text";
 import type { RawCandidate, SourceConfig, SourceSnapshot } from "./types";
 
 const REQUEST_HEADERS = {
-  "User-Agent": "IntelligenceUpdateBot/0.1 (+https://ai.yunyun.page)",
+  "User-Agent": "IntelligenceUpdateBot/0.1 (+https://intel.yunyun.page)",
   Accept: "application/rss+xml, application/atom+xml, application/xml, application/json, text/html, */*",
   "Cache-Control": "no-cache",
 };

@@ -7,7 +7,7 @@
   "workers_dev": true,
   "routes": [
     {
-      "pattern": "ai.yunyun.page",
+      "pattern": "intel.yunyun.page",
       "custom_domain": true
     }
   ],

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ai.yunyun.page"),
+  metadataBase: new URL("https://intel.yunyun.page"),
   title: "Intelligence Update — Real-Time AI Releases & Rumor Radar",
   description:
     "Signal-first tracker for official AI updates, SDK releases, and Gemini-evaluated industry rumors.",

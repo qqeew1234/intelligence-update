@@ -2,7 +2,7 @@
 
 > **Official AI releases & Gemini-synthesized rumor radar — zero fluff.**
 
-- **Live URL**: [https://ai.yunyun.page](https://ai.yunyun.page)
+- **Live URL**: [https://intel.yunyun.page](https://intel.yunyun.page)
 - **GitHub Repository**: [https://github.com/qqeew1234/intelligence-update](https://github.com/qqeew1234/intelligence-update)
 
 ## Features
