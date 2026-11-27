@@ -5,9 +5,13 @@ import {
   buildOfficialItem,
   evaluateRumorBatch,
   getRumorEvaluatorInfo,
+  type ExistingRumorContext,
 } from "./summarizer";
+import { canonicalizeUrl } from "./text";
 import type {
+  CorroboratingSource,
   RawCandidate,
+  RumorEvaluation,
   SourceConfig,
   SyncResult,
   SyncSourceReport,
@@ -26,15 +30,88 @@ export interface RunSyncOptions {
 
 const MAX_OFFICIAL_ITEMS = 150;
 const MAX_RUMOR_ITEMS = 100;
-const MAX_UPGRADE_RUMORS_PER_SYNC = 6;
+const MAX_UPGRADE_RUMORS_PER_SYNC = 12;
+const RECENT_RUMOR_WINDOW_MS = 72 * 60 * 60 * 1000;
+
+function ensureCorroboratingSources(item: UpdateItem): CorroboratingSource[] {
+  if (Array.isArray(item.corroboratingSources) && item.corroboratingSources.length > 0) {
+    return item.corroboratingSources;
+  }
+  return [
+    {
+      sourceId: item.sourceId,
+      sourceName: item.sourceName,
+      title: item.title,
+      url: item.url,
+      publishedAt: item.publishedAt,
+    },
+  ];
+}
+
+function mergeCorroboratingSource(
+  target: UpdateItem,
+  incoming: CorroboratingSource,
+  updatedRumor?: Partial<RumorEvaluation>,
+  updatedSummary?: string[]
+): boolean {
+  const existing = ensureCorroboratingSources(target);
+  const incomingKey = `${incoming.sourceId}::${canonicalizeUrl(incoming.url)}`;
+  const alreadyHas = existing.some(
+    (s) => `${s.sourceId}::${canonicalizeUrl(s.url)}` === incomingKey
+  );
+
+  const nextSources = alreadyHas ? existing : [...existing, incoming].slice(0, 10);
+  target.corroboratingSources = nextSources;
+
+  if (target.rumor) {
+    const mergedRumor: RumorEvaluation = {
+      ...target.rumor,
+      ...updatedRumor,
+    };
+    if (nextSources.length >= 2) {
+      mergedRumor.evidenceBasis = "multiple_reports";
+    }
+    target.rumor = mergedRumor;
+    target.evaluatedBy = mergedRumor.evaluatedBy;
+  }
+
+  if (updatedSummary && updatedSummary.length > 0) {
+    target.summary = updatedSummary;
+  }
+
+  return !alreadyHas;
+}
+
+function buildRecentRumorContext(
+  items: Iterable<UpdateItem>,
+  excludeIds = new Set<string>()
+): ExistingRumorContext[] {
+  const cutoff = Date.now() - RECENT_RUMOR_WINDOW_MS;
+  return Array.from(items)
+    .filter(
+      (u) =>
+        u.track === "rumor" &&
+        !excludeIds.has(u.id) &&
+        new Date(u.publishedAt).getTime() >= cutoff
+    )
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 30)
+    .map((u) => ({
+      id: u.id,
+      vendor: u.vendor,
+      headline: u.headline,
+      claim: u.rumor?.claim ?? u.headline,
+      sourceName: u.sourceName,
+    }));
+}
 
 export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult> {
   const {
     track = "all",
     limitPerSource,
     officialLimit = 5,
-    rumorLimit = 3,
-    maxGeminiRumors = 18,
+    rumorLimit = 2,
+    maxGeminiRumors = 24,
     useGemini = true,
   } = options;
 
@@ -42,6 +119,21 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
   const syncedAt = new Date().toISOString();
 
   const existingById = new Map<string, UpdateItem>(store.updates.map((u) => [u.id, u]));
+  const existingRumorByUrl = new Map<string, UpdateItem>();
+  for (const item of store.updates) {
+    if (item.track !== "rumor") continue;
+    for (const src of ensureCorroboratingSources(item)) {
+      const key = canonicalizeUrl(src.url);
+      if (key && !existingRumorByUrl.has(key)) {
+        existingRumorByUrl.set(key, item);
+      }
+    }
+    const primaryKey = canonicalizeUrl(item.url);
+    if (primaryKey && !existingRumorByUrl.has(primaryKey)) {
+      existingRumorByUrl.set(primaryKey, item);
+    }
+  }
+
   const targetSources = SOURCES.filter(
     (s) => s.enabled && (track === "all" || s.track === track)
   );
@@ -60,7 +152,10 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
   );
   const newOfficial: Array<{ source: SourceConfig; candidate: RawCandidate }> = [];
   const newRumors: Array<{ source: SourceConfig; candidate: RawCandidate }> = [];
+  const queuedRumorByUrl = new Map<string, { source: SourceConfig; candidate: RawCandidate }>();
+  const pendingUrlMerges: Array<{ targetId: string; source: CorroboratingSource }> = [];
   const currentReports: SyncSourceReport[] = [];
+  let mergedDuplicatesCount = 0;
 
   for (let i = 0; i < targetSources.length; i++) {
     const source = targetSources[i];
@@ -72,14 +167,50 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
 
       let sourceNewCount = 0;
       for (const candidate of output.candidates) {
-        if (!existingById.has(candidate.externalId)) {
-          if (source.track === "official") {
-            newOfficial.push({ source, candidate });
-          } else {
-            newRumors.push({ source, candidate });
-          }
+        if (existingById.has(candidate.externalId)) continue;
+
+        if (source.track === "official") {
+          newOfficial.push({ source, candidate });
           sourceNewCount++;
+          continue;
         }
+
+        // Stage 1: Canonical URL deduplication against stored rumors and current batch
+        const canonical = canonicalizeUrl(candidate.url);
+        const existingTarget = canonical ? existingRumorByUrl.get(canonical) : undefined;
+        if (existingTarget) {
+          const added = mergeCorroboratingSource(existingTarget, {
+            sourceId: source.id,
+            sourceName: source.name,
+            title: candidate.title,
+            url: candidate.url,
+            publishedAt: candidate.publishedAt,
+          });
+          if (added) mergedDuplicatesCount++;
+          continue;
+        }
+
+        const queuedTarget = canonical ? queuedRumorByUrl.get(canonical) : undefined;
+        if (queuedTarget) {
+          pendingUrlMerges.push({
+            targetId: queuedTarget.candidate.externalId,
+            source: {
+              sourceId: source.id,
+              sourceName: source.name,
+              title: candidate.title,
+              url: candidate.url,
+              publishedAt: candidate.publishedAt,
+            },
+          });
+          mergedDuplicatesCount++;
+          continue;
+        }
+
+        if (canonical) {
+          queuedRumorByUrl.set(canonical, { source, candidate });
+        }
+        newRumors.push({ source, candidate });
+        sourceNewCount++;
       }
 
       const report: SyncSourceReport = {
@@ -141,8 +272,14 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
 
   const geminiBudgetItems = newRumors.slice(0, maxGeminiRumors);
   const overflowRumorItems = newRumors.slice(maxGeminiRumors);
+  const recentRumorsContext = buildRecentRumorContext(existingById.values());
 
-  const primaryEval = await evaluateRumorBatch(geminiBudgetItems, canUseGemini);
+  // Stage 2: Gemini synthesis + semantic cross-source clustering
+  const primaryEval = await evaluateRumorBatch(
+    geminiBudgetItems,
+    canUseGemini,
+    recentRumorsContext
+  );
   const overflowEval = await evaluateRumorBatch(overflowRumorItems, false);
 
   for (const item of [...primaryEval.items, ...overflowEval.items]) {
@@ -150,10 +287,30 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
     totalNew++;
   }
 
+  for (const merge of pendingUrlMerges) {
+    const target = existingById.get(merge.targetId);
+    if (target) {
+      mergeCorroboratingSource(target, merge.source);
+    }
+  }
+
+  for (const merge of primaryEval.merges) {
+    const target = existingById.get(merge.targetId);
+    if (target) {
+      const added = mergeCorroboratingSource(
+        target,
+        merge.source,
+        merge.updatedRumor,
+        merge.updatedSummary
+      );
+      if (added) mergedDuplicatesCount++;
+    }
+  }
+
   let rumorsEvaluatedCount = primaryEval.geminiEvaluatedCount;
   let rumorModel = primaryEval.modelUsed;
 
-  // If Gemini is enabled and budget remains, upgrade up to 6 older rule-evaluated rumors.
+  // If Gemini is enabled and budget remains, upgrade up to 12 older rule-evaluated rumors.
   const remainingBudget = Math.max(0, maxGeminiRumors - geminiBudgetItems.length);
   if (canUseGemini && remainingBudget > 0 && (track === "all" || track === "rumor")) {
     const sourceMap = new Map(SOURCES.map((s) => [s.id, s]));
@@ -164,10 +321,14 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
       .slice(0, upgradeLimit);
 
     if (toUpgrade.length > 0) {
+      const upgradeIds = new Set(toUpgrade.map((u) => u.id));
       const upgradeEntries: Array<{ source: SourceConfig; candidate: RawCandidate }> = [];
+      const priorById = new Map<string, UpdateItem>();
+
       for (const item of toUpgrade) {
         const src = sourceMap.get(item.sourceId);
         if (!src) continue;
+        priorById.set(item.id, item);
         upgradeEntries.push({
           source: src,
           candidate: {
@@ -184,10 +345,44 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
       }
 
       if (upgradeEntries.length > 0) {
-        const upgraded = await evaluateRumorBatch(upgradeEntries, true);
+        const contextExcludingUpgrades = buildRecentRumorContext(
+          existingById.values(),
+          upgradeIds
+        );
+        const upgraded = await evaluateRumorBatch(
+          upgradeEntries,
+          true,
+          contextExcludingUpgrades
+        );
+
         for (const item of upgraded.items) {
+          const prior = priorById.get(item.id);
+          if (prior?.corroboratingSources && prior.corroboratingSources.length > 1) {
+            item.corroboratingSources = prior.corroboratingSources;
+            if (item.rumor) {
+              item.rumor.evidenceBasis = "multiple_reports";
+            }
+          }
           existingById.set(item.id, item);
         }
+
+        for (const merge of upgraded.merges) {
+          const target = existingById.get(merge.targetId);
+          if (target) {
+            mergeCorroboratingSource(
+              target,
+              merge.source,
+              merge.updatedRumor,
+              merge.updatedSummary
+            );
+            existingById.delete(
+              upgradeEntries.find((e) => e.candidate.url === merge.source.url)?.candidate
+                .externalId ?? ""
+            );
+            mergedDuplicatesCount++;
+          }
+        }
+
         rumorsEvaluatedCount += upgraded.geminiEvaluatedCount;
         rumorModel = rumorModel ?? upgraded.modelUsed;
       }
@@ -219,6 +414,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
     totalFetched,
     totalNew,
     rumorsEvaluatedCount,
+    mergedDuplicatesCount,
     rumorModel,
     reports: currentReports,
   };

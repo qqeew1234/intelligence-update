@@ -351,8 +351,10 @@ export function UpdateFeedClient({
           ...item.summary,
           item.devImpact ?? "",
           item.rumor?.claim ?? "",
+          item.rumor?.impact ?? "",
           item.rumor?.evidenceSummary ?? "",
           item.rumor?.caveat ?? "",
+          ...(item.corroboratingSources?.map((s) => `${s.sourceName} ${s.title}`) ?? []),
         ]
           .join(" ")
           .toLowerCase();
@@ -405,14 +407,21 @@ export function UpdateFeedClient({
       const newCount = data.result?.totalNew ?? 0;
       const fetchedCount = data.result?.totalFetched ?? 0;
       const geminiCount = data.result?.rumorsEvaluatedCount ?? 0;
+      const mergedCount = data.result?.mergedDuplicatesCount ?? 0;
+      const extras = [
+        `${fetchedCount} checked`,
+        geminiCount > 0 ? `${geminiCount} rumors evaluated by Gemini` : "",
+        mergedCount > 0 ? `${mergedCount} duplicates merged` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+
       setToast({
         type: "ok",
         message:
           newCount > 0
-            ? `Synced ${newCount} new items (${fetchedCount} checked${
-                geminiCount > 0 ? `, ${geminiCount} rumors evaluated by Gemini` : ""
-              }).`
-            : `Up to date (${fetchedCount} items checked, no new updates).`,
+            ? `Synced ${newCount} new items (${extras}).`
+            : `Up to date (${extras}).`,
       });
     } catch (err) {
       setToast({
@@ -545,7 +554,7 @@ export function UpdateFeedClient({
               </span>
               <span className="inline-flex items-center gap-1.5 text-slate-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Auto-sync hourly · Auto-refresh every 5m</span>
+                <span>Auto-sync every 30m · Auto-refresh every 5m</span>
               </span>
             </div>
             <span key={`${activeTrack}-${filteredUpdates.length}-${activeTotal}`}>
@@ -914,6 +923,13 @@ export function UpdateFeedClient({
                         <span translate="no" className="text-xs font-medium text-slate-500">
                           {item.sourceName}
                         </span>
+                        {(item.corroboratingSources?.length ?? 1) > 1 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-200">
+                            Corroborated ·{" "}
+                            <span translate="no">{item.corroboratingSources!.length}</span>{" "}
+                            Sources
+                          </span>
+                        )}
                       </div>
 
                       <time
@@ -949,6 +965,12 @@ export function UpdateFeedClient({
                         <span className="font-semibold text-slate-900">Core Claim: </span>
                         {item.rumor.claim}
                       </p>
+                      {item.rumor.impact && (
+                        <p>
+                          <span className="font-semibold text-slate-900">Why It Matters: </span>
+                          {item.rumor.impact}
+                        </p>
+                      )}
                       <p>
                         <span className="font-semibold text-slate-900">Evidence / Basis: </span>
                         {item.rumor.evidenceSummary}
@@ -967,6 +989,7 @@ export function UpdateFeedClient({
                           {CATEGORY_LABELS[item.category]}
                         </span>
                         <span
+                          translate="no"
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                             item.rumor.evaluatedBy === "gemini"
                               ? "bg-emerald-50 text-emerald-700"
@@ -980,15 +1003,34 @@ export function UpdateFeedClient({
                         </span>
                       </div>
 
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
-                      >
-                        <span>Read Source</span>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {(item.corroboratingSources?.length ?? 1) > 1 ? (
+                          item.corroboratingSources!.map((src, idx) => (
+                            <a
+                              key={`${src.sourceId}-${idx}`}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              translate="no"
+                              title={src.title}
+                              className="inline-flex min-h-[32px] items-center gap-1 rounded-lg bg-indigo-50/70 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                            >
+                              <span>{src.sourceName}</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))
+                        ) : (
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                          >
+                            <span>Read Source</span>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </article>
                 );

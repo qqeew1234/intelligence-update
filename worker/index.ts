@@ -7,13 +7,15 @@ export default {
   },
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     _env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
+    const utcMinutes = new Date(controller.scheduledTime).getUTCMinutes();
+    const track = utcMinutes >= 15 && utcMinutes < 45 ? "rumor" : "official";
     ctx.waitUntil(
-      runSync().catch((err) => {
-        console.error("[scheduled sync] failed:", err);
+      runSync({ track }).catch((err) => {
+        console.error(`[scheduled sync:${track}] failed:`, err);
       })
     );
   },

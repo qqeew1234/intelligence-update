@@ -4,6 +4,7 @@ import { compactWhitespace } from "./text";
 import type {
   Audience,
   Category,
+  CorroboratingSource,
   CredibilityLevel,
   EvidenceBasis,
   Importance,
@@ -17,9 +18,25 @@ import type {
 export const DEFAULT_GEMINI_RUMOR_MODEL = "gemini-3.5-flash-lite";
 const RUMOR_BATCH_SIZE = 6;
 
+export interface ExistingRumorContext {
+  id: string;
+  vendor: string;
+  headline: string;
+  claim: string;
+  sourceName: string;
+}
+
+export interface RumorMerge {
+  targetId: string;
+  source: CorroboratingSource;
+  updatedRumor?: Partial<RumorEvaluation>;
+  updatedSummary?: string[];
+}
+
 interface GeminiRumorItemResult {
   id?: string;
   is_relevant?: boolean;
+  duplicateOfId?: string;
   vendor?: string;
   headline?: string;
   summary?: string[];
@@ -31,6 +48,7 @@ interface GeminiRumorItemResult {
   credibilityScore?: number;
   evidenceBasis?: EvidenceBasis;
   claim?: string;
+  impact?: string;
   evidenceSummary?: string;
   caveat?: string;
 }
@@ -45,6 +63,7 @@ const RUMOR_BATCH_JSON_SCHEMA = {
         properties: {
           id: { type: "string" },
           is_relevant: { type: "boolean" },
+          duplicateOfId: { type: "string" },
           vendor: { type: "string" },
           headline: { type: "string" },
           summary: { type: "array", items: { type: "string" } },
@@ -85,12 +104,14 @@ const RUMOR_BATCH_JSON_SCHEMA = {
             ],
           },
           claim: { type: "string" },
+          impact: { type: "string" },
           evidenceSummary: { type: "string" },
           caveat: { type: "string" },
         },
         required: [
           "id",
           "is_relevant",
+          "duplicateOfId",
           "vendor",
           "headline",
           "summary",
@@ -102,6 +123,7 @@ const RUMOR_BATCH_JSON_SCHEMA = {
           "credibilityScore",
           "evidenceBasis",
           "claim",
+          "impact",
           "evidenceSummary",
           "caveat",
         ],
@@ -111,27 +133,29 @@ const RUMOR_BATCH_JSON_SCHEMA = {
   required: ["items"],
 };
 
-const RUMOR_SYSTEM_INSTRUCTION = `You are a skeptical AI industry intelligence analyst evaluating unconfirmed rumors, leaks, media scoops, community discussions, and early research signals.
+const RUMOR_SYSTEM_INSTRUCTION = `You are an AI industry intelligence editor synthesizing raw rumors, leaks, insider scoops, research papers, and community threads into concise, processed intelligence briefings.
 
-For each candidate item, return a structured JSON assessment:
-- Set is_relevant = false ONLY for obvious spam or items unrelated to AI models, products, tooling, chips, or AI labs.
-- vendor: Identify the primary AI company or ecosystem (e.g., "OpenAI", "Anthropic", "Google", "xAI", "Meta", "DeepSeek", "Cursor", "NVIDIA", "Hugging Face", or "Industry").
-- headline: Clear, neutral English headline (max 90 chars) without clickbait.
-- summary: 2 concise, factual English bullet points summarizing what is being reported.
-- rumorType:
-  - "unreleased_leak": Code strings, UI screenshots, A/B tests, feature flags, or leaked specs.
-  - "insider_report": Press reporting citing internal sources or executives.
-  - "community_buzz": Hacker News / developer community threads or benchmarks.
-  - "early_research": Preprints, daily papers, or open-weight research signals.
-- credibility & credibilityScore (0-100):
-  - "high" (75-100): Backed by verifiable code/UI artifacts, reproducible benchmarks, or multiple reputable outlets.
-  - "medium" (45-74): Plausible named-source reporting or strong community technical analysis, still unconfirmed by vendor.
-  - "low" (15-44): Anonymous single-source claims, vague hints, or speculative commentary.
-  - "unverified" (0-60): Early claim lacking corroboration or testable artifacts.
-- evidenceBasis: Choose the closest fit from "code_or_ui_artifact", "multiple_reports", "named_insider", "single_source", or "speculation".
-- claim: 1 crisp sentence stating the core unconfirmed claim.
-- evidenceSummary: 1-2 sentences explaining what supporting evidence or artifacts exist in the item.
-- caveat: 1 sentence stating what remains unconfirmed, missing, or uncertain.`;
+Tasks for each candidate:
+1. Relevance & Deduplication:
+   - Set is_relevant = false ONLY for obvious spam or items unrelated to AI models, products, tooling, chips, or AI labs.
+   - Check the provided recentRumors list AND earlier items in the current batch. If this candidate reports on the SAME underlying leak, rumor, release scoop, paper, or event as an existing item, set duplicateOfId to that matching item's exact id (otherwise set duplicateOfId to "").
+   - When duplicateOfId is non-empty, synthesize updated evidenceSummary, impact, credibility, credibilityScore, and caveat reflecting the added corroboration.
+2. Intelligence Briefing Synthesis (do NOT merely copy the raw title):
+   - vendor: Primary AI company or ecosystem ("OpenAI", "Anthropic", "Google", "xAI", "Meta", "DeepSeek", "Cursor", "NVIDIA", "Hugging Face", or "Industry").
+   - headline: Rewrite into a crisp, neutral intelligence headline (max 90 chars, no clickbait).
+   - summary: 2-3 tight, synthesized English bullet points capturing the concrete technical or product substance.
+   - claim: 1 crisp sentence stating the core unconfirmed or emerging claim.
+   - impact: 1 concise sentence explaining why this matters for AI builders, developers, or users if confirmed.
+   - evidenceSummary: 1-2 sentences evaluating the actual evidence, artifacts, or corroboration present.
+   - caveat: 1 sentence stating what remains unconfirmed, speculative, or missing.
+3. Credibility Rubric:
+   - rumorType: "unreleased_leak" (code/UI/feature flags), "insider_report" (press sourcing), "community_buzz" (HN/Lobsters/community), or "early_research" (papers/preprints).
+   - credibility & credibilityScore (0-100):
+     - "high" (75-100): Verifiable code/UI artifacts, reproducible benchmarks, or multiple corroborating outlets.
+     - "medium" (45-74): Plausible named-source reporting or strong technical analysis, still unconfirmed by vendor.
+     - "low" (15-44): Anonymous single-source claims, vague hints, or speculative commentary.
+     - "unverified" (0-60): Early claim lacking corroboration or testable artifacts.
+   - evidenceBasis: "code_or_ui_artifact", "multiple_reports", "named_insider", "single_source", or "speculation".`;
 
 export async function getRumorEvaluatorInfo(): Promise<{
   mode: "gemini" | "rule";
@@ -358,23 +382,26 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
   let evidenceBasis: EvidenceBasis = "single_source";
   let credibility: CredibilityLevel = "unverified";
   let credibilityScore = 45;
+  let impact = `Potential ${vendor === "Press" || vendor === "Industry" ? "AI ecosystem" : vendor} capability or roadmap shift worth monitoring.`;
   let evidenceSummary = `Reported by ${source.name}; awaiting official vendor confirmation.`;
   let caveat = "No official vendor announcement or primary documentation links were detected.";
 
-  if (source.type === "hf_daily_papers") {
+  if (source.type === "hf_daily_papers" || source.id === "interconnects") {
     rumorType = "early_research";
     evidenceBasis = "code_or_ui_artifact";
     credibility = "high";
     credibilityScore = 76;
-    evidenceSummary = `Listed on Hugging Face Daily Papers with community upvotes and preprint abstract.`;
-    caveat = "Research preprints do not guarantee immediate commercial product rollout.";
-  } else if (source.type === "hn_algolia") {
+    impact = "Highlights emerging techniques or open-weight trends that often precede product adoption.";
+    evidenceSummary = `Published via ${source.name} with technical analysis or research artifacts.`;
+    caveat = "Research findings do not guarantee immediate commercial product rollout.";
+  } else if (source.type === "hn_algolia" || source.id === "lobsters-ai" || source.id === "simon-willison") {
     rumorType = "community_buzz";
     evidenceBasis = "multiple_reports";
     credibility = "medium";
     credibilityScore = 58;
-    evidenceSummary = `Trending developer discussion on Hacker News with active technical scrutiny.`;
-    caveat = "Community thread sentiment and claims vary; inspect linked primary artifact.";
+    impact = "Reflects real-world developer experimentation, tooling shifts, or early bug/feature discoveries.";
+    evidenceSummary = `Surfaced in ${source.name} with technical developer commentary.`;
+    caveat = "Community observations vary; inspect linked primary artifact before relying on it.";
   } else if (
     source.id === "testingcatalog" ||
     /\b(feature flag|apk|webapp|spotted|hidden|ui|screenshot|code|teardown|unreleased)\b/.test(
@@ -385,6 +412,7 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
     evidenceBasis = "code_or_ui_artifact";
     credibility = "medium";
     credibilityScore = 66;
+    impact = `Signals upcoming ${vendor} product features or UI changes currently in staged testing.`;
     evidenceSummary = `References observed UI, client code, or staged feature flags prior to release.`;
     caveat = "Staged experiments and feature flags can change or be cancelled before launch.";
   } else if (/\b(reuters|bloomberg|the information|financial times|wsj|exclusive)\b/.test(haystack)) {
@@ -392,6 +420,7 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
     evidenceBasis = "named_insider";
     credibility = "medium";
     credibilityScore = 62;
+    impact = "Points to strategic model, hardware, or commercial moves still under wraps.";
     evidenceSummary = `Cites press reporting or industry insiders; details remain unconfirmed publicly.`;
     caveat = "Timelines, pricing, and final product scope may shift before official release.";
   } else if (/\b(rumor|allegedly|unconfirmed|speculat)\b/.test(haystack)) {
@@ -409,6 +438,7 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
     evidenceBasis,
     rumorType,
     claim: candidate.title,
+    impact,
     evidenceSummary,
     caveat,
     evaluatedBy: "rule",
@@ -427,6 +457,15 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
     audiences: base.audiences,
     category: base.category,
     rumor,
+    corroboratingSources: [
+      {
+        sourceId: source.id,
+        sourceName: source.name,
+        title: candidate.title,
+        url: candidate.url,
+        publishedAt: candidate.publishedAt,
+      },
+    ],
     url: candidate.url,
     publishedAt: candidate.publishedAt,
     collectedAt: nowIso,
@@ -456,14 +495,16 @@ function parseGeminiBatchJson(text: string): GeminiRumorItemResult[] {
 
 export async function evaluateRumorBatch(
   entries: Array<{ source: SourceConfig; candidate: RawCandidate }>,
-  allowGemini: boolean
+  allowGemini: boolean,
+  existingRumors: ExistingRumorContext[] = []
 ): Promise<{
   items: UpdateItem[];
+  merges: RumorMerge[];
   geminiEvaluatedCount: number;
   modelUsed: string | null;
 }> {
   if (entries.length === 0) {
-    return { items: [], geminiEvaluatedCount: 0, modelUsed: null };
+    return { items: [], merges: [], geminiEvaluatedCount: 0, modelUsed: null };
   }
 
   const apiKey = allowGemini ? await getEnvVar("GEMINI_API_KEY") : undefined;
@@ -472,6 +513,7 @@ export async function evaluateRumorBatch(
   if (!apiKey) {
     return {
       items: entries.map(({ source, candidate }) => buildHeuristicRumorItem(source, candidate)),
+      merges: [],
       geminiEvaluatedCount: 0,
       modelUsed: null,
     };
@@ -479,6 +521,9 @@ export async function evaluateRumorBatch(
 
   const client = new GoogleGenAI({ apiKey });
   const results: UpdateItem[] = [];
+  const merges: RumorMerge[] = [];
+  const knownContext: ExistingRumorContext[] = [...existingRumors];
+  const knownIds = new Set(knownContext.map((r) => r.id));
   let geminiEvaluatedCount = 0;
 
   for (let i = 0; i < entries.length; i += RUMOR_BATCH_SIZE) {
@@ -498,11 +543,14 @@ export async function evaluateRumorBatch(
       const interaction = await client.interactions.create({
         model,
         system_instruction: RUMOR_SYSTEM_INSTRUCTION,
-        input: `Evaluate the following ${chunk.length} AI rumor/signal items and return JSON matching the schema:\n\n${JSON.stringify(
-          payload,
+        input: JSON.stringify(
+          {
+            recentRumors: knownContext.slice(0, 30),
+            candidates: payload,
+          },
           null,
           2
-        )}`,
+        ),
         store: false,
         response_format: {
           type: "text",
@@ -516,7 +564,9 @@ export async function evaluateRumorBatch(
         : [];
       evaluatedById = new Map(
         parsedItems
-          .filter((item): item is GeminiRumorItemResult & { id: string } => typeof item.id === "string")
+          .filter(
+            (item): item is GeminiRumorItemResult & { id: string } => typeof item.id === "string"
+          )
           .map((item) => [item.id, item])
       );
     } catch (err) {
@@ -529,6 +579,14 @@ export async function evaluateRumorBatch(
 
       if (!gem) {
         results.push(fallbackItem);
+        knownIds.add(fallbackItem.id);
+        knownContext.unshift({
+          id: fallbackItem.id,
+          vendor: fallbackItem.vendor,
+          headline: fallbackItem.headline,
+          claim: fallbackItem.rumor?.claim ?? fallbackItem.headline,
+          sourceName: fallbackItem.sourceName,
+        });
         continue;
       }
 
@@ -548,6 +606,7 @@ export async function evaluateRumorBatch(
         evidenceBasis: normalizeEvidenceBasis(gem.evidenceBasis, fallbackRumor.evidenceBasis),
         rumorType: normalizeRumorType(gem.rumorType, fallbackRumor.rumorType),
         claim: compactWhitespace(gem.claim || "") || fallbackRumor.claim,
+        impact: compactWhitespace(gem.impact || "") || fallbackRumor.impact,
         evidenceSummary:
           compactWhitespace(gem.evidenceSummary || "") || fallbackRumor.evidenceSummary,
         caveat: compactWhitespace(gem.caveat || "") || fallbackRumor.caveat,
@@ -555,7 +614,28 @@ export async function evaluateRumorBatch(
         model,
       };
 
-      results.push({
+      const dupTarget = compactWhitespace(gem.duplicateOfId || "");
+      if (dupTarget && dupTarget !== candidate.externalId && knownIds.has(dupTarget)) {
+        merges.push({
+          targetId: dupTarget,
+          source: {
+            sourceId: source.id,
+            sourceName: source.name,
+            title: candidate.title,
+            url: candidate.url,
+            publishedAt: candidate.publishedAt,
+          },
+          updatedRumor: {
+            ...rumor,
+            evidenceBasis: "multiple_reports",
+          },
+          updatedSummary: summary,
+        });
+        geminiEvaluatedCount++;
+        continue;
+      }
+
+      const createdItem: UpdateItem = {
         ...fallbackItem,
         vendor: compactWhitespace(gem.vendor || "") || fallbackItem.vendor,
         headline: compactWhitespace(gem.headline || "") || fallbackItem.headline,
@@ -565,6 +645,16 @@ export async function evaluateRumorBatch(
         category: normalizeCategory(gem.category, fallbackItem.category),
         rumor,
         evaluatedBy: "gemini",
+      };
+
+      results.push(createdItem);
+      knownIds.add(createdItem.id);
+      knownContext.unshift({
+        id: createdItem.id,
+        vendor: createdItem.vendor,
+        headline: createdItem.headline,
+        claim: rumor.claim,
+        sourceName: createdItem.sourceName,
       });
       geminiEvaluatedCount++;
     }
@@ -572,6 +662,7 @@ export async function evaluateRumorBatch(
 
   return {
     items: results,
+    merges,
     geminiEvaluatedCount,
     modelUsed: geminiEvaluatedCount > 0 ? model : null,
   };

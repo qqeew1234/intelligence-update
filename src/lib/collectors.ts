@@ -141,8 +141,14 @@ async function collectRssOrAtom(
     throw new Error("Unrecognized RSS/Atom XML root");
   }
 
-  rawItems.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-  const candidates = rawItems.slice(0, limit);
+  const filteredItems = source.aiFilter
+    ? rawItems.filter((item) => AI_TOPIC_REGEX.test(`${item.title}\n${item.rawText}`))
+    : rawItems;
+
+  filteredItems.sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+  const candidates = filteredItems.slice(0, limit);
   const seenSet = new Set(prevSnapshot?.seenIds ?? []);
   for (const c of candidates) {
     seenSet.add(c.externalId);
@@ -150,7 +156,7 @@ async function collectRssOrAtom(
 
   return {
     candidates,
-    fetchedCount: rawItems.length,
+    fetchedCount: filteredItems.length,
     nextSnapshot: {
       sourceId: source.id,
       lastCheckedAt: nowIso,

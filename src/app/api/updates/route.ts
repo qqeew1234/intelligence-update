@@ -52,8 +52,10 @@ export async function GET(request: NextRequest) {
         ...item.summary,
         item.devImpact ?? "",
         item.rumor?.claim ?? "",
+        item.rumor?.impact ?? "",
         item.rumor?.evidenceSummary ?? "",
         item.rumor?.caveat ?? "",
+        ...(item.corroboratingSources?.map((s) => `${s.sourceName} ${s.title}`) ?? []),
       ]
         .join(" ")
         .toLowerCase();

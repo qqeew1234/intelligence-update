@@ -36,12 +36,21 @@ export type EvidenceBasis =
   | "single_source"
   | "speculation";
 
+export interface CorroboratingSource {
+  sourceId: string;
+  sourceName: string;
+  title: string;
+  url: string;
+  publishedAt: string;
+}
+
 export interface RumorEvaluation {
   credibility: CredibilityLevel;
   credibilityScore: number;
   evidenceBasis: EvidenceBasis;
   rumorType: RumorType;
   claim: string;
+  impact?: string;
   evidenceSummary: string;
   caveat: string;
   evaluatedBy: "gemini" | "rule";
@@ -58,6 +67,7 @@ export interface SourceConfig {
   defaultAudiences: Audience[];
   defaultCategory: Category;
   enabled: boolean;
+  aiFilter?: boolean;
 }
 
 export interface RawCandidate {
@@ -83,6 +93,7 @@ export interface UpdateItem {
   category: Category;
   devImpact?: string;
   rumor?: RumorEvaluation;
+  corroboratingSources?: CorroboratingSource[];
   url: string;
   publishedAt: string;
   collectedAt: string;
@@ -115,6 +126,7 @@ export interface SyncResult {
   totalFetched: number;
   totalNew: number;
   rumorsEvaluatedCount: number;
+  mergedDuplicatesCount?: number;
   rumorModel: string | null;
   reports: SyncSourceReport[];
 }

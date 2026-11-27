@@ -82,3 +82,30 @@ export function toIsoDate(value?: string | number | null): string {
   }
   return new Date().toISOString();
 }
+
+const TRACKING_PARAMS = new Set(["ref", "source", "fbclid", "gclid", "mc_cid", "mc_eid"]);
+
+/**
+ * Normalize a URL by stripping www., hash fragments, trailing slashes, and tracking parameters.
+ */
+export function canonicalizeUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      const lower = key.toLowerCase();
+      if (lower.startsWith("utm_") || TRACKING_PARAMS.has(lower)) {
+        parsed.searchParams.delete(key);
+      }
+    }
+    parsed.searchParams.sort();
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    const search = parsed.searchParams.toString();
+    return `${parsed.protocol}//${parsed.hostname}${pathname}${search ? `?${search}` : ""}`;
+  } catch {
+    return trimmed.toLowerCase().replace(/\/+$/, "");
+  }
+}
