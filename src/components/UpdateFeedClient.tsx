@@ -78,17 +78,17 @@ const IMPORTANCE_STYLES: Record<Importance, { label: string; className: string }
   major: {
     label: "MAJOR",
     className:
-      "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-800/70",
+      "bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/20 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-400/25",
   },
   minor: {
     label: "MINOR",
     className:
-      "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800/70",
+      "bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/20 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-400/25",
   },
   patch: {
     label: "PATCH",
     className:
-      "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
+      "bg-black/[0.05] text-neutral-700 ring-1 ring-black/[0.08] dark:bg-white/[0.08] dark:text-neutral-300 dark:ring-white/[0.12]",
   },
 };
 
@@ -99,25 +99,25 @@ const CREDIBILITY_STYLES: Record<
   high: {
     label: "HIGH",
     className:
-      "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-800/70",
+      "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/25",
     icon: ShieldCheck,
   },
   medium: {
     label: "MEDIUM",
     className:
-      "bg-amber-50 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-800/70",
+      "bg-amber-500/10 text-amber-800 ring-1 ring-amber-500/25 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/25",
     icon: AlertTriangle,
   },
   low: {
     label: "LOW",
     className:
-      "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-800/70",
+      "bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/20 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-400/25",
     icon: ShieldAlert,
   },
   unverified: {
     label: "UNVERIFIED",
     className:
-      "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
+      "bg-black/[0.05] text-neutral-700 ring-1 ring-black/[0.08] dark:bg-white/[0.08] dark:text-neutral-300 dark:ring-white/[0.12]",
     icon: AlertCircle,
   },
 };
@@ -221,6 +221,10 @@ export function UpdateFeedClient({
     const applyTheme = () => {
       const isDark = theme === "dark" || (theme === "system" && mediaQuery.matches);
       document.documentElement.classList.toggle("dark", isDark);
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute("content", isDark ? "#202124" : "#f5f5f7");
+      }
     };
 
     applyTheme();
@@ -452,20 +456,20 @@ export function UpdateFeedClient({
 
   return (
     <div className="min-h-screen pb-16">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+      {/* Seamless Top Header */}
+      <header className="mx-auto max-w-4xl px-4 pt-6 pb-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <span
                 translate="no"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold tracking-tight text-white dark:bg-indigo-500"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-900 text-xs font-bold tracking-tight text-white shadow-xs dark:bg-white dark:text-neutral-900"
               >
                 IU
               </span>
               <h1
                 translate="no"
-                className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-2xl"
+                className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-2xl"
               >
                 Intelligence Update
               </h1>
@@ -473,8 +477,8 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   evaluator.mode === "gemini"
-                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-800/70"
-                    : "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+                    ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/25"
+                    : "bg-black/[0.05] text-neutral-600 ring-1 ring-black/[0.08] dark:bg-white/[0.08] dark:text-neutral-300 dark:ring-white/[0.12]"
                 }`}
               >
                 <Sparkles className="h-3 w-3" />
@@ -483,7 +487,7 @@ export function UpdateFeedClient({
                   : "Heuristic Rumor Eval (Add GEMINI_API_KEY)"}
               </span>
             </div>
-            <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-1.5 text-sm text-neutral-600 dark:text-neutral-400">
               Official AI releases &amp; Gemini-evaluated rumor radar — zero fluff.
             </p>
           </div>
@@ -492,7 +496,7 @@ export function UpdateFeedClient({
             <div
               role="group"
               aria-label="Theme mode"
-              className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-800/80"
+              className="glass-inset inline-flex items-center rounded-xl p-1"
             >
               {(
                 [
@@ -511,8 +515,8 @@ export function UpdateFeedClient({
                     title={`Theme: ${label}`}
                     className={`inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
                       active
-                        ? "bg-white text-slate-900 shadow-xs dark:bg-slate-950 dark:text-slate-100"
-                        : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                        ? "bg-white text-neutral-900 shadow-xs dark:bg-white/[0.14] dark:text-white"
+                        : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                     }`}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -525,7 +529,7 @@ export function UpdateFeedClient({
             <button
               type="button"
               onClick={() => setSourcesOpen(true)}
-              className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="glass-card inline-flex min-h-[42px] items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium text-neutral-700 transition hover:bg-white/90 dark:text-neutral-200 dark:hover:bg-white/[0.12]"
             >
               <Radio className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Sources ({sources.length})</span>
@@ -533,51 +537,52 @@ export function UpdateFeedClient({
           </div>
         </div>
 
-        {/* Meta Bar */}
-        <div className="border-t border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/60">
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>
-                Last checked:{" "}
-                <strong
-                  key={relativeLastChecked}
-                  suppressHydrationWarning
-                  title={
-                    lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("en-US") : undefined
-                  }
-                  className="font-medium text-slate-700 dark:text-slate-200"
-                >
-                  {relativeLastChecked}
-                </strong>
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Auto-sync every 30m · Auto-refresh every 5m</span>
-              </span>
-            </div>
-            <span key={`${activeTrack}-${filteredUpdates.length}-${activeTotal}`}>
-              Showing{" "}
-              <strong translate="no" className="font-semibold text-slate-800 dark:text-slate-100">
-                {filteredUpdates.length}
-              </strong>{" "}
-              of{" "}
-              <span translate="no" className="font-medium text-slate-700 dark:text-slate-300">
-                {activeTotal}
-              </span>
+        {/* Compact Meta Row */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              Last checked:{" "}
+              <strong
+                key={relativeLastChecked}
+                suppressHydrationWarning
+                title={
+                  lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("en-US") : undefined
+                }
+                className="font-medium text-neutral-800 dark:text-neutral-200"
+              >
+                {relativeLastChecked}
+              </strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span>Auto-sync every 30m · Auto-refresh every 5m</span>
             </span>
           </div>
+          <span key={`${activeTrack}-${filteredUpdates.length}-${activeTotal}`}>
+            Showing{" "}
+            <strong translate="no" className="font-semibold text-neutral-900 dark:text-neutral-100">
+              {filteredUpdates.length}
+            </strong>{" "}
+            of{" "}
+            <span translate="no" className="font-medium text-neutral-700 dark:text-neutral-300">
+              {activeTotal}
+            </span>
+          </span>
         </div>
+      </header>
 
-        {/* Primary Track Tabs */}
-        <div className="border-t border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-2.5">
+      {/* Consolidated Non-Sticky Frosted Matte Glass Dock */}
+      <section className="mx-auto max-w-4xl px-4">
+        <div className="glass-dock flex flex-col gap-3 rounded-3xl p-3.5 sm:p-4">
+          {/* Row 1: Primary Track Tabs */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveTrack("official")}
-              className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
                 activeTrack === "official"
-                  ? "bg-slate-900 text-white shadow-xs dark:bg-indigo-500 dark:text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                  : "glass-inset text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-300 dark:hover:bg-white/[0.09]"
               }`}
             >
               <ShieldCheck className="h-4 w-4" />
@@ -586,8 +591,8 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "official"
-                    ? "bg-white/15 text-white"
-                    : "bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                    ? "bg-white/15 text-white dark:bg-neutral-900/12 dark:text-neutral-900"
+                    : "bg-black/[0.06] text-neutral-700 dark:bg-white/[0.10] dark:text-neutral-200"
                 }`}
               >
                 {officialItems.length}
@@ -597,10 +602,10 @@ export function UpdateFeedClient({
             <button
               type="button"
               onClick={() => setActiveTrack("rumor")}
-              className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
                 activeTrack === "rumor"
-                  ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-slate-950"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
+                  : "glass-inset text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-300 dark:hover:bg-white/[0.09]"
               }`}
             >
               <Radar className="h-4 w-4" />
@@ -609,8 +614,8 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "rumor"
-                    ? "bg-white/20 text-white dark:bg-slate-950/20 dark:text-slate-950"
-                    : "bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                    ? "bg-white/20 text-white dark:bg-neutral-950/15 dark:text-neutral-950"
+                    : "bg-black/[0.06] text-neutral-700 dark:bg-white/[0.10] dark:text-neutral-200"
                 }`}
               >
                 {rumorItems.length}
@@ -618,21 +623,16 @@ export function UpdateFeedClient({
               <span
                 className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:inline-block ${
                   activeTrack === "rumor"
-                    ? "bg-amber-700/60 text-amber-50 dark:bg-slate-950/15 dark:text-slate-950"
-                    : "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800/70"
+                    ? "bg-amber-700/60 text-amber-50 dark:bg-neutral-950/15 dark:text-neutral-950"
+                    : "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/25"
                 }`}
               >
                 AI Credibility &amp; Evidence
               </span>
             </button>
           </div>
-        </div>
-      </header>
 
-      {/* Sticky Filter Bar */}
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3">
-          {/* Row 1: Track-specific Filters + Search */}
+          {/* Row 2: Track-specific Filters + Search */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {activeTrack === "official" ? (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -649,10 +649,10 @@ export function UpdateFeedClient({
                       key={id}
                       type="button"
                       onClick={() => setAudienceFilter(id)}
-                      className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                         active
-                          ? "bg-slate-900 text-white shadow-sm dark:bg-indigo-500 dark:text-white"
-                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800"
+                          ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                          : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                       }`}
                     >
                       <Icon className="h-3.5 w-3.5" />
@@ -664,10 +664,10 @@ export function UpdateFeedClient({
                 <button
                   type="button"
                   onClick={() => setMajorOnly((v) => !v)}
-                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                     majorOnly
-                      ? "bg-rose-600 text-white shadow-sm"
-                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800"
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
                   <span>Major Only</span>
@@ -676,15 +676,15 @@ export function UpdateFeedClient({
                 <button
                   type="button"
                   onClick={() => setSubscribedOnly((v) => !v)}
-                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                     subscribedOnly
-                      ? "bg-amber-500 text-white shadow-sm dark:text-slate-950"
-                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800"
+                      ? "bg-amber-500 text-white shadow-xs dark:text-neutral-950"
+                      : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
                   <Star
                     className={`h-3.5 w-3.5 ${
-                      subscribedOnly ? "fill-white dark:fill-slate-950" : ""
+                      subscribedOnly ? "fill-white dark:fill-neutral-950" : ""
                     }`}
                   />
                   <span>Pinned ({pinnedVendors.length})</span>
@@ -704,10 +704,10 @@ export function UpdateFeedClient({
                     key={id}
                     type="button"
                     onClick={() => setCredibilityFilter(id)}
-                    className={`inline-flex min-h-[38px] items-center rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex min-h-[38px] items-center rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                       credibilityFilter === id
-                        ? "bg-amber-600 text-white shadow-sm dark:bg-amber-500 dark:text-slate-950"
-                        : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800"
+                        ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
+                        : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                     }`}
                   >
                     {label}
@@ -718,19 +718,29 @@ export function UpdateFeedClient({
                   value={rumorTypeFilter}
                   onChange={(e) => setRumorTypeFilter(e.target.value as "all" | RumorType)}
                   aria-label="Filter by rumor type"
-                  className="h-[38px] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-500"
+                  className="glass-inset h-[38px] rounded-xl px-2.5 text-xs font-medium text-neutral-800 focus:border-neutral-400 focus:outline-none dark:text-neutral-200 dark:focus:border-white/30"
                 >
-                  <option value="all">All Signal Types</option>
-                  <option value="unreleased_leak">Unreleased Leaks</option>
-                  <option value="insider_report">Insider Reports</option>
-                  <option value="community_buzz">Community Buzz</option>
-                  <option value="early_research">Early Research</option>
+                  <option value="all" className="bg-white dark:bg-[#292a2d]">
+                    All Signal Types
+                  </option>
+                  <option value="unreleased_leak" className="bg-white dark:bg-[#292a2d]">
+                    Unreleased Leaks
+                  </option>
+                  <option value="insider_report" className="bg-white dark:bg-[#292a2d]">
+                    Insider Reports
+                  </option>
+                  <option value="community_buzz" className="bg-white dark:bg-[#292a2d]">
+                    Community Buzz
+                  </option>
+                  <option value="early_research" className="bg-white dark:bg-[#292a2d]">
+                    Early Research
+                  </option>
                 </select>
               </div>
             )}
 
             <div className="relative w-full sm:w-60">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400 dark:text-neutral-500" />
               <input
                 type="search"
                 value={searchQuery}
@@ -740,20 +750,20 @@ export function UpdateFeedClient({
                     ? "Search models, features, SDKs..."
                     : "Search rumors, claims, evidence..."
                 }
-                className="h-[38px] w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-slate-500"
+                className="glass-inset h-[38px] w-full rounded-xl pl-8 pr-3 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-white/30"
               />
             </div>
           </div>
 
-          {/* Row 2: Vendor Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {/* Row 3: Wrapped Vendor Chips (No horizontal scroll) */}
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => setSelectedVendor("all")}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
+              className={`min-h-[32px] rounded-full px-3 py-1 text-xs font-medium transition ${
                 selectedVendor === "all"
-                  ? "bg-indigo-600 text-white dark:bg-indigo-500"
-                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800"
+                  ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                  : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
               }`}
             >
               All Vendors
@@ -765,10 +775,10 @@ export function UpdateFeedClient({
               return (
                 <div
                   key={vendor}
-                  className={`inline-flex shrink-0 items-center rounded-full transition ${
+                  className={`inline-flex min-h-[32px] items-center rounded-full transition ${
                     isSelected
-                      ? "bg-indigo-600 text-white dark:bg-indigo-500"
-                      : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800"
+                      ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                      : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
                   <button
@@ -793,11 +803,11 @@ export function UpdateFeedClient({
                         className={`h-3 w-3 ${
                           isPinned
                             ? isSelected
-                              ? "fill-amber-300 text-amber-300"
+                              ? "fill-amber-400 text-amber-400 dark:fill-amber-500 dark:text-amber-500"
                               : "fill-amber-400 text-amber-400"
                             : isSelected
-                            ? "text-indigo-200"
-                            : "text-slate-300 dark:text-slate-600"
+                            ? "text-white/50 dark:text-neutral-900/40"
+                            : "text-neutral-400 dark:text-neutral-500"
                         }`}
                       />
                     </button>
@@ -807,12 +817,12 @@ export function UpdateFeedClient({
             })}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Main Feed */}
-      <main className="mx-auto mt-4 max-w-4xl px-4">
+      <main className="mx-auto mt-5 max-w-4xl px-4">
         {activeTrack === "rumor" && (
-          <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="mb-3 flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-900 backdrop-blur-md dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <p>
               <strong>Unconfirmed Signals:</strong> Items on Rumor Radar aggregate leaks,
@@ -827,13 +837,13 @@ export function UpdateFeedClient({
         )}
 
         {filteredUpdates.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <div className="glass-card rounded-3xl p-10 text-center">
+            <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
               {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
                 ? `No ${activeTrack === "official" ? "official updates" : "rumor signals"} collected yet.`
                 : "No items match your active filters."}
             </p>
-            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
               {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
                 ? "Updates are collected automatically every 30 minutes."
                 : "Reset filters or try a different search query."}
@@ -842,14 +852,14 @@ export function UpdateFeedClient({
               <button
                 type="button"
                 onClick={resetActiveFilters}
-                className="mt-4 inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="glass-inset mt-4 inline-flex items-center rounded-xl px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-200 dark:hover:bg-white/[0.1]"
               >
                 Reset Filters
               </button>
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3.5">
             {filteredUpdates.map((item) => {
               if (item.track === "rumor" && item.rumor) {
                 const credStyle = CREDIBILITY_STYLES[item.rumor.credibility];
@@ -857,7 +867,7 @@ export function UpdateFeedClient({
                 return (
                   <article
                     key={item.id}
-                    className="rounded-2xl border border-amber-200/80 bg-white p-4 shadow-xs transition hover:border-amber-300 dark:border-amber-900/60 dark:bg-slate-900 dark:hover:border-amber-700/80 sm:p-5"
+                    className="glass-card-rumor rounded-3xl p-4 transition hover:border-amber-500/35 dark:hover:border-amber-400/30 sm:p-5"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -870,26 +880,26 @@ export function UpdateFeedClient({
                             {credStyle.label} · {item.rumor.credibilityScore}/100
                           </span>
                         </span>
-                        <span className="rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:bg-amber-950/70 dark:text-amber-300">
+                        <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-300">
                           {RUMOR_TYPE_LABELS[item.rumor.rumorType]}
                         </span>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="rounded-md bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-white/[0.08] dark:text-neutral-300">
                           {EVIDENCE_BASIS_LABELS[item.rumor.evidenceBasis]}
                         </span>
                         <span
                           translate="no"
-                          className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-slate-700 dark:text-slate-100"
+                          className="rounded-md bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white/[0.14] dark:text-neutral-100"
                         >
                           {item.vendor}
                         </span>
                         <span
                           translate="no"
-                          className="text-xs font-medium text-slate-500 dark:text-slate-400"
+                          className="text-xs font-medium text-neutral-500 dark:text-neutral-400"
                         >
                           {item.sourceName}
                         </span>
                         {(item.corroboratingSources?.length ?? 1) > 1 && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800/70">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-500/20 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-400/25">
                             Corroborated ·{" "}
                             <span translate="no">{item.corroboratingSources!.length}</span>{" "}
                             Sources
@@ -901,72 +911,72 @@ export function UpdateFeedClient({
                         dateTime={item.publishedAt}
                         title={new Date(item.publishedAt).toLocaleString("en-US")}
                         suppressHydrationWarning
-                        className="text-xs text-slate-400 dark:text-slate-500"
+                        className="text-xs text-neutral-400 dark:text-neutral-500"
                       >
                         {formatRelativeTime(item.publishedAt, nowMs)}
                       </time>
                     </div>
 
-                    <h2 className="mt-2.5 text-base font-bold leading-snug text-slate-900 dark:text-slate-50 sm:text-[17px]">
+                    <h2 className="mt-2.5 text-base font-bold leading-snug text-neutral-900 dark:text-neutral-50 sm:text-[17px]">
                       {item.headline}
                     </h2>
 
                     {item.headline !== item.title && (
-                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                      <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
                         {item.title}
                       </p>
                     )}
 
-                    <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300 sm:text-sm">
+                    <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-neutral-700 dark:text-neutral-300 sm:text-sm">
                       {item.summary.map((line, idx) => (
                         <li key={idx} className="flex items-start gap-2">
-                          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-400" />
+                          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
                           <span>{line}</span>
                         </li>
                       ))}
                     </ul>
 
                     {/* Credibility & Evidence Assessment Panel */}
-                    <div className="mt-3.5 space-y-1.5 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 ring-1 ring-slate-200/80 dark:bg-slate-800/70 dark:text-slate-300 dark:ring-slate-700/80">
+                    <div className="glass-inset mt-3.5 space-y-1.5 rounded-2xl p-3 text-xs text-neutral-700 dark:text-neutral-300">
                       <p>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        <span className="font-semibold text-neutral-900 dark:text-neutral-100">
                           Core Claim:{" "}
                         </span>
                         {item.rumor.claim}
                       </p>
                       {item.rumor.impact && (
                         <p>
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                          <span className="font-semibold text-neutral-900 dark:text-neutral-100">
                             Why It Matters:{" "}
                           </span>
                           {item.rumor.impact}
                         </p>
                       )}
                       <p>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        <span className="font-semibold text-neutral-900 dark:text-neutral-100">
                           Evidence / Basis:{" "}
                         </span>
                         {item.rumor.evidenceSummary}
                       </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      <p className="text-neutral-600 dark:text-neutral-400">
+                        <span className="font-semibold text-neutral-800 dark:text-neutral-200">
                           Caveat / Unconfirmed:{" "}
                         </span>
                         {item.rumor.caveat}
                       </p>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.08]">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="rounded-full bg-black/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-white/[0.08] dark:text-neutral-300">
                           {CATEGORY_LABELS[item.category]}
                         </span>
                         <span
                           translate="no"
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                             item.rumor.evaluatedBy === "gemini"
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                              ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                              : "bg-black/[0.05] text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                           }`}
                         >
                           <Sparkles className="h-3 w-3" />
@@ -986,7 +996,7 @@ export function UpdateFeedClient({
                               rel="noopener noreferrer"
                               translate="no"
                               title={src.title}
-                              className="inline-flex min-h-[32px] items-center gap-1 rounded-lg bg-indigo-50/70 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/70"
+                              className="inline-flex min-h-[32px] items-center gap-1 rounded-lg bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-500/20 dark:bg-indigo-400/15 dark:text-indigo-300 dark:hover:bg-indigo-400/25"
                             >
                               <span>{src.sourceName}</span>
                               <ExternalLink className="h-3 w-3" />
@@ -997,7 +1007,7 @@ export function UpdateFeedClient({
                             href={item.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/60"
+                            className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-white/[0.08]"
                           >
                             <span>Read Source</span>
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -1013,7 +1023,7 @@ export function UpdateFeedClient({
               return (
                 <article
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 sm:p-5"
+                  className="glass-card rounded-3xl p-4 transition hover:border-black/15 dark:hover:border-white/15 sm:p-5"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1025,13 +1035,13 @@ export function UpdateFeedClient({
                       </span>
                       <span
                         translate="no"
-                        className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-slate-700 dark:text-slate-100"
+                        className="rounded-md bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white/[0.14] dark:text-neutral-100"
                       >
                         {item.vendor}
                       </span>
                       <span
                         translate="no"
-                        className="text-xs font-medium text-slate-500 dark:text-slate-400"
+                        className="text-xs font-medium text-neutral-500 dark:text-neutral-400"
                       >
                         {item.sourceName}
                       </span>
@@ -1041,52 +1051,52 @@ export function UpdateFeedClient({
                       dateTime={item.publishedAt}
                       title={new Date(item.publishedAt).toLocaleString("en-US")}
                       suppressHydrationWarning
-                      className="text-xs text-slate-400 dark:text-slate-500"
+                      className="text-xs text-neutral-400 dark:text-neutral-500"
                     >
                       {formatRelativeTime(item.publishedAt, nowMs)}
                     </time>
                   </div>
 
-                  <h2 className="mt-2.5 text-base font-bold leading-snug text-slate-900 dark:text-slate-50 sm:text-[17px]">
+                  <h2 className="mt-2.5 text-base font-bold leading-snug text-neutral-900 dark:text-neutral-50 sm:text-[17px]">
                     {item.headline}
                   </h2>
 
                   {item.headline !== item.title && (
-                    <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                    <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
                       {item.title}
                     </p>
                   )}
 
-                  <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300 sm:text-sm">
+                  <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-neutral-700 dark:text-neutral-300 sm:text-sm">
                     {item.summary.map((line, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-400 dark:bg-slate-500" />
+                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />
                         <span>{line}</span>
                       </li>
                     ))}
                   </ul>
 
                   {item.devImpact && (
-                    <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800/70 dark:text-slate-300 dark:ring-slate-700/80">
-                      <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    <div className="glass-inset mt-3 rounded-2xl px-3 py-2 text-xs text-neutral-600 dark:text-neutral-300">
+                      <span className="font-semibold text-neutral-900 dark:text-neutral-100">
                         Developer Note:{" "}
                       </span>
                       {item.devImpact}
                     </div>
                   )}
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.08]">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <span className="rounded-full bg-black/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-white/[0.08] dark:text-neutral-300">
                         {CATEGORY_LABELS[item.category]}
                       </span>
                       {item.audiences.includes("developer") && (
-                        <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
+                        <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
                           Developers
                         </span>
                       )}
                       {item.audiences.includes("general") && (
-                        <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                        <span className="rounded-full bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                           General
                         </span>
                       )}
@@ -1096,7 +1106,7 @@ export function UpdateFeedClient({
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/60"
+                      className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-white/[0.08]"
                     >
                       <span>Read Source</span>
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -1112,19 +1122,19 @@ export function UpdateFeedClient({
       {/* Sources Status Drawer / Modal */}
       {sourcesOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 backdrop-blur-xs dark:bg-slate-950/70 sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-sm dark:bg-black/65 sm:items-center sm:p-4"
           onClick={() => setSourcesOpen(false)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl dark:border dark:border-slate-800 dark:bg-slate-900 sm:rounded-2xl"
+            className="glass-modal max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl p-5 sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-black/[0.06] pb-3 dark:border-white/[0.08]">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-50">
                   Monitored Sources ({sources.length})
                 </h3>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
                   {syncLogs.length > 0
                     ? `Latest sync: ${okSourceCount}/${sources.length} healthy`
                     : "No sync runs recorded yet."}
@@ -1133,7 +1143,7 @@ export function UpdateFeedClient({
               <button
                 type="button"
                 onClick={() => setSourcesOpen(false)}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                className="rounded-xl p-2 text-neutral-500 hover:bg-black/[0.05] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -1145,10 +1155,10 @@ export function UpdateFeedClient({
               { title: `Rumor & Signal Sources (${rumorSources.length})`, items: rumorSources },
             ].map((group) => (
               <div key={group.title} className="mt-4">
-                <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   {group.title}
                 </h4>
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="divide-y divide-black/[0.06] dark:divide-white/[0.08]">
                   {group.items.map((src) => {
                     const report = logBySourceId.get(src.id);
                     return (
@@ -1157,17 +1167,17 @@ export function UpdateFeedClient({
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
                               translate="no"
-                              className="text-xs font-bold text-slate-900 dark:text-slate-100"
+                              className="text-xs font-bold text-neutral-900 dark:text-neutral-100"
                             >
                               {src.name}
                             </span>
                             <span
                               translate="no"
-                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                              className="rounded bg-black/[0.05] px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                             >
                               {src.vendor}
                             </span>
-                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                            <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-300">
                               {SOURCE_TYPE_LABELS[src.type]}
                             </span>
                           </div>
@@ -1175,7 +1185,7 @@ export function UpdateFeedClient({
                             href={src.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1 block truncate text-[11px] text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400"
+                            className="mt-1 block truncate text-[11px] text-neutral-400 hover:text-indigo-600 dark:text-neutral-500 dark:hover:text-indigo-300"
                           >
                             {src.url}
                           </a>
@@ -1191,8 +1201,8 @@ export function UpdateFeedClient({
                             <span
                               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                                 report.status === "ok"
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                                  ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                  : "bg-rose-500/10 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
                               }`}
                             >
                               {report.status === "ok"
@@ -1200,7 +1210,7 @@ export function UpdateFeedClient({
                                 : "Error"}
                             </span>
                           ) : (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-400">
                               Pending
                             </span>
                           )}
