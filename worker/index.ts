@@ -12,7 +12,7 @@ export default {
     ctx: ExecutionContext
   ): Promise<void> {
     ctx.waitUntil(
-      runSync({ limitPerSource: 5 }).catch((err) => {
+      runSync().catch((err) => {
         console.error("[scheduled sync] failed:", err);
       })
     );

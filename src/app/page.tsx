@@ -1,13 +1,12 @@
 import { UpdateFeedClient } from "@/components/UpdateFeedClient";
 import { SOURCES } from "@/lib/sources";
 import { readStore } from "@/lib/storage";
-import { getActiveLlmProvider } from "@/lib/summarizer";
+import { getRumorEvaluatorInfo } from "@/lib/summarizer";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const store = await readStore();
-  const llmProvider = await getActiveLlmProvider();
+  const [store, evaluator] = await Promise.all([readStore(), getRumorEvaluatorInfo()]);
 
   return (
     <UpdateFeedClient
@@ -15,7 +14,7 @@ export default async function HomePage() {
       initialLastSyncedAt={store.lastSyncedAt}
       initialSyncLogs={store.syncLogs}
       sources={SOURCES}
-      llmProvider={llmProvider}
+      evaluator={evaluator}
     />
   );
 }

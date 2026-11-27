@@ -1,23 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readStore } from "@/lib/storage";
+import { getRumorEvaluatorInfo } from "@/lib/summarizer";
 import { runSync } from "@/lib/sync";
+import type { Track } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const result = await runSync({ limitPerSource: 5 });
-    const store = await readStore();
+    const trackParam = request.nextUrl.searchParams.get("track");
+    const track: Track | "all" =
+      trackParam === "official" || trackParam === "rumor" ? trackParam : "all";
+
+    const result = await runSync({ track });
+    const [store, evaluator] = await Promise.all([readStore(), getRumorEvaluatorInfo()]);
     return NextResponse.json({
       result,
       totalCount: store.updates.length,
       updates: store.updates,
       syncLogs: store.syncLogs,
       lastSyncedAt: store.lastSyncedAt,
+      evaluator,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.";
+    const message = err instanceof Error ? err.message : "Failed to sync sources.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

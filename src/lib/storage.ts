@@ -1,7 +1,7 @@
 import { getCloudflareEnv } from "./env";
 import type { StoreData } from "./types";
 
-const KV_STORE_KEY = "store:v1";
+const KV_STORE_KEY = "store:v2";
 
 interface KvNamespaceLike {
   get(key: string, type: "json"): Promise<unknown>;

@@ -1,34 +1,35 @@
-import { getActiveLlmProvider } from "../src/lib/summarizer";
+import { getRumorEvaluatorInfo } from "../src/lib/summarizer";
 import { runSync } from "../src/lib/sync";
 
 async function main() {
-  const provider = await getActiveLlmProvider();
-  console.log(`[지능 업데이트] 동기화 시작 (요약 모드: ${provider})`);
+  const evaluator = await getRumorEvaluatorInfo();
+  console.log(
+    `[Intelligence Update] Starting sync (Rumor eval mode: ${evaluator.mode}, model: ${evaluator.model})`
+  );
 
   const result = await runSync({
-    limitPerSource: 5,
-    maxLlmItems: 15,
-    useLlm: provider !== "rule",
+    useGemini: evaluator.mode === "gemini",
   });
 
-  console.log("\n소스별 수집 결과:");
+  console.log("\nSource Sync Report:");
   console.table(
     result.reports.map((r) => ({
-      소스: r.sourceName,
-      벤더: r.vendor,
-      유형: r.type,
-      상태: r.status === "ok" ? "OK" : `ERR (${r.error ?? "unknown"})`,
-      전체수: r.fetchedCount,
-      신규: r.newCount,
+      Track: r.track,
+      Source: r.sourceName,
+      Vendor: r.vendor,
+      Type: r.type,
+      Status: r.status === "ok" ? "OK" : `ERR (${r.error ?? "unknown"})`,
+      Fetched: r.fetchedCount,
+      New: r.newCount,
     }))
   );
 
   console.log(
-    `완료 (${result.syncedAt}) — 총 ${result.totalFetched}건 확인, 신규 ${result.totalNew}건 저장 (AI 요약: ${result.llmSummarizedCount}건)`
+    `Completed (${result.syncedAt}) — ${result.totalFetched} items checked, ${result.totalNew} new items saved (Gemini rumors evaluated: ${result.rumorsEvaluatedCount}${result.rumorModel ? ` via ${result.rumorModel}` : ""})`
   );
 }
 
 main().catch((err) => {
-  console.error("동기화 실행 중 오류:", err);
+  console.error("Sync failed:", err);
   process.exit(1);
 });

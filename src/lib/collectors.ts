@@ -8,6 +8,9 @@ const REQUEST_HEADERS = {
   "Cache-Control": "no-cache",
 };
 
+const AI_TOPIC_REGEX =
+  /\b(ai|llm|openai|gpt-?\d|chatgpt|anthropic|claude|gemini|deepmind|deepseek|xai|grok|cursor|mistral|llama|qwen|ollama|nvidia|hugging\s*face|diffusion|agentic|mcp|inference|transformer)\b/i;
+
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -171,10 +174,10 @@ interface OpenRouterModel {
 }
 
 function formatPricePerMillion(perToken?: string): string {
-  if (!perToken) return "미정";
+  if (!perToken) return "TBD";
   const num = Number.parseFloat(perToken);
-  if (!Number.isFinite(num)) return "미정";
-  if (num === 0) return "무료($0)";
+  if (!Number.isFinite(num)) return "TBD";
+  if (num === 0) return "Free ($0)";
   const perMillion = num * 1_000_000;
   return `$${perMillion < 0.01 ? perMillion.toFixed(4) : perMillion.toFixed(2)}/1M`;
 }
@@ -306,7 +309,7 @@ async function collectHtmlChangelog(
     if (plain && pageHash !== prevSnapshot?.lastHash) {
       candidates.push({
         externalId: `${source.id}:${pageHash.slice(0, 16)}`,
-        title: `${source.name} 페이지 변경 감지`,
+        title: `${source.name} page change detected`,
         url: source.url,
         publishedAt: nowIso,
         rawText: plain.slice(0, 1500),
@@ -333,6 +336,148 @@ async function collectHtmlChangelog(
   };
 }
 
+interface HnHit {
+  objectID?: string;
+  title?: string;
+  url?: string | null;
+  story_text?: string | null;
+  author?: string;
+  points?: number;
+  num_comments?: number;
+  created_at?: string;
+}
+
+async function collectHnAlgolia(
+  source: SourceConfig,
+  prevSnapshot: SourceSnapshot | undefined,
+  limit: number,
+  nowIso: string
+): Promise<CollectSourceOutput> {
+  const text = await fetchText(source.url);
+  const json = JSON.parse(text) as { hits?: HnHit[] };
+  const hits = Array.isArray(json.hits) ? json.hits : [];
+
+  const aiHits = hits.filter((hit) => {
+    const title = compactWhitespace(hit.title ?? "");
+    if (!title) return false;
+    const body = stripHtml(hit.story_text ?? "");
+    return AI_TOPIC_REGEX.test(`${title}\n${body}`);
+  });
+
+  const candidates: RawCandidate[] = aiHits.slice(0, limit).map((hit) => {
+    const id = String(hit.objectID ?? sha256(hit.title ?? nowIso).slice(0, 12));
+    const title = compactWhitespace(hit.title ?? "Untitled HN Story");
+    const hnUrl = `https://news.ycombinator.com/item?id=${id}`;
+    const targetUrl = hit.url && hit.url.startsWith("http") ? hit.url : hnUrl;
+    const body = stripHtml(hit.story_text ?? "").slice(0, 1500);
+    const rawText = [
+      `Engagement: ${hit.points ?? 0} points, ${hit.num_comments ?? 0} comments on Hacker News`,
+      hit.author ? `Author: ${hit.author}` : "",
+      `HN Discussion: ${hnUrl}`,
+      body ? `Excerpt: ${body}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      externalId: `${source.id}:${id}`,
+      title,
+      url: targetUrl,
+      publishedAt: toIsoDate(hit.created_at),
+      rawText,
+      contentHash: sha256(`${id}:${title}:${body.slice(0, 200)}`),
+    };
+  });
+
+  const seenSet = new Set(prevSnapshot?.seenIds ?? []);
+  for (const c of candidates) {
+    seenSet.add(c.externalId);
+  }
+
+  return {
+    candidates,
+    fetchedCount: aiHits.length,
+    nextSnapshot: {
+      sourceId: source.id,
+      lastCheckedAt: nowIso,
+      lastSuccessAt: nowIso,
+      lastHash: sha256(candidates.map((c) => c.contentHash).join("|")),
+      seenIds: Array.from(seenSet).slice(-500),
+    },
+  };
+}
+
+interface HfDailyPaperEntry {
+  publishedAt?: string;
+  title?: string;
+  summary?: string;
+  paper?: {
+    id?: string;
+    title?: string;
+    summary?: string;
+    publishedAt?: string;
+    upvotes?: number;
+  };
+}
+
+async function collectHfDailyPapers(
+  source: SourceConfig,
+  prevSnapshot: SourceSnapshot | undefined,
+  limit: number,
+  nowIso: string
+): Promise<CollectSourceOutput> {
+  const text = await fetchText(source.url);
+  const entries = JSON.parse(text) as HfDailyPaperEntry[];
+  const list = Array.isArray(entries) ? entries : [];
+
+  const sorted = [...list].sort(
+    (a, b) => (b.paper?.upvotes ?? 0) - (a.paper?.upvotes ?? 0)
+  );
+
+  const candidates: RawCandidate[] = [];
+  for (const entry of sorted.slice(0, limit)) {
+    const paper = entry.paper;
+    const paperId = paper?.id?.trim();
+    const title = compactWhitespace(paper?.title ?? entry.title ?? "");
+    if (!paperId || !title) continue;
+
+    const abstractText = compactWhitespace(paper?.summary ?? entry.summary ?? "").slice(0, 1800);
+    const upvotes = paper?.upvotes ?? 0;
+    const rawText = [
+      `Hugging Face Daily Papers (${upvotes} upvotes)`,
+      abstractText ? `Abstract: ${abstractText}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    candidates.push({
+      externalId: `${source.id}:${paperId}`,
+      title,
+      url: `https://huggingface.co/papers/${paperId}`,
+      publishedAt: toIsoDate(paper?.publishedAt ?? entry.publishedAt),
+      rawText,
+      contentHash: sha256(`${paperId}:${title}`),
+    });
+  }
+
+  const seenSet = new Set(prevSnapshot?.seenIds ?? []);
+  for (const c of candidates) {
+    seenSet.add(c.externalId);
+  }
+
+  return {
+    candidates,
+    fetchedCount: list.length,
+    nextSnapshot: {
+      sourceId: source.id,
+      lastCheckedAt: nowIso,
+      lastSuccessAt: nowIso,
+      lastHash: sha256(candidates.map((c) => c.contentHash).join("|")),
+      seenIds: Array.from(seenSet).slice(-500),
+    },
+  };
+}
+
 export async function collectFromSource(
   source: SourceConfig,
   prevSnapshot: SourceSnapshot | undefined,
@@ -348,5 +493,9 @@ export async function collectFromSource(
       return collectOpenRouterModels(source, prevSnapshot, limit, nowIso);
     case "html_changelog":
       return collectHtmlChangelog(source, prevSnapshot, limit, nowIso);
+    case "hn_algolia":
+      return collectHnAlgolia(source, prevSnapshot, limit, nowIso);
+    case "hf_daily_papers":
+      return collectHfDailyPapers(source, prevSnapshot, limit, nowIso);
   }
 }

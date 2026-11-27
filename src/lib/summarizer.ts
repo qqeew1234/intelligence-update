@@ -1,128 +1,220 @@
+import { GoogleGenAI } from "@google/genai";
 import { getEnvVar } from "./env";
 import { compactWhitespace } from "./text";
 import type {
   Audience,
   Category,
+  CredibilityLevel,
+  EvidenceBasis,
   Importance,
   RawCandidate,
+  RumorEvaluation,
+  RumorType,
   SourceConfig,
   UpdateItem,
 } from "./types";
 
-interface LlmClassification {
-  is_meaningful?: boolean;
+export const DEFAULT_GEMINI_RUMOR_MODEL = "gemini-3.5-flash-lite";
+const RUMOR_BATCH_SIZE = 6;
+
+interface GeminiRumorItemResult {
+  id?: string;
+  is_relevant?: boolean;
+  vendor?: string;
+  headline?: string;
+  summary?: string[];
   importance?: Importance;
   audiences?: Audience[];
   category?: Category;
-  titleKo?: string;
-  summaryKo?: string[];
-  devImpact?: string;
+  rumorType?: RumorType;
+  credibility?: CredibilityLevel;
+  credibilityScore?: number;
+  evidenceBasis?: EvidenceBasis;
+  claim?: string;
+  evidenceSummary?: string;
+  caveat?: string;
 }
 
-export async function getActiveLlmProvider(): Promise<"gemini" | "openai" | "rule"> {
-  if (await getEnvVar("GEMINI_API_KEY")) return "gemini";
-  if (await getEnvVar("OPENAI_API_KEY")) return "openai";
-  return "rule";
-}
-
-function buildPrompt(source: SourceConfig, candidate: RawCandidate): string {
-  return `당신은 AI 기술/제품 업데이트 전문 큐레이터입니다.
-아래 공식 소스에서 수집된 새 업데이트를 분석해 반드시 유효한 JSON 객체 하나만 반환하세요. (마크다운 코드블록 금지)
-
-[소스 정보]
-- 서비스/벤더: ${source.name} (${source.vendor})
-- 기본 타깃: ${source.defaultAudiences.join(", ")}
-- 원문 제목: ${candidate.title}
-- 원문 내용:
-${candidate.rawText.slice(0, 2000)}
-
-[반환 JSON 스키마]
-{
-  "is_meaningful": true,
-  "importance": "major" | "minor" | "patch",
-  "audiences": ["developer" | "general"],
-  "category": "new_model" | "new_feature" | "pricing" | "deprecation" | "coding_tool" | "bugfix" | "research",
-  "titleKo": "한국어 핵심 제목 (45자 이내, 직관적으로)",
-  "summaryKo": ["핵심 변경점 1줄", "실무/사용자 체감 변화 1줄", "세부 참고사항 1줄 (선택)"],
-  "devImpact": "개발자 API/SDK/코딩툴 영향 1줄 요약 (개발자 관련 없으면 빈 문자열)"
-}
-
-[분류 기준]
-- major: 신규 모델 출시, 대형 신기능, API 가격/한도/지원종료(deprecation) 변경, 주요 메이저 버전(vX.0.0)
-- minor: 일반 기능 추가, 새 툴/옵션 지원, OpenRouter 신규 모델 등록, 일반 블로그 발표
-- patch: 단순 버그 수정, 의존성 업데이트, 사소한 패치 버전`;
-}
-
-function parseLlmJson(text: string): LlmClassification | null {
-  const cleaned = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  try {
-    return JSON.parse(cleaned.slice(start, end + 1)) as LlmClassification;
-  } catch {
-    return null;
-  }
-}
-
-async function callGemini(prompt: string, apiKey: string): Promise<LlmClassification | null> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(15000),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
+const RUMOR_BATCH_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          is_relevant: { type: "boolean" },
+          vendor: { type: "string" },
+          headline: { type: "string" },
+          summary: { type: "array", items: { type: "string" } },
+          importance: { type: "string", enum: ["major", "minor", "patch"] },
+          audiences: {
+            type: "array",
+            items: { type: "string", enum: ["developer", "general"] },
+          },
+          category: {
+            type: "string",
+            enum: [
+              "new_model",
+              "new_feature",
+              "pricing",
+              "deprecation",
+              "coding_tool",
+              "bugfix",
+              "research",
+            ],
+          },
+          rumorType: {
+            type: "string",
+            enum: ["unreleased_leak", "insider_report", "community_buzz", "early_research"],
+          },
+          credibility: {
+            type: "string",
+            enum: ["high", "medium", "low", "unverified"],
+          },
+          credibilityScore: { type: "integer" },
+          evidenceBasis: {
+            type: "string",
+            enum: [
+              "code_or_ui_artifact",
+              "multiple_reports",
+              "named_insider",
+              "single_source",
+              "speculation",
+            ],
+          },
+          claim: { type: "string" },
+          evidenceSummary: { type: "string" },
+          caveat: { type: "string" },
+        },
+        required: [
+          "id",
+          "is_relevant",
+          "vendor",
+          "headline",
+          "summary",
+          "importance",
+          "audiences",
+          "category",
+          "rumorType",
+          "credibility",
+          "credibilityScore",
+          "evidenceBasis",
+          "claim",
+          "evidenceSummary",
+          "caveat",
+        ],
       },
-    }),
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  return raw ? parseLlmJson(raw) : null;
-}
-
-async function callOpenAI(prompt: string, apiKey: string): Promise<LlmClassification | null> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
     },
-    signal: AbortSignal.timeout(15000),
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+  },
+  required: ["items"],
+};
+
+const RUMOR_SYSTEM_INSTRUCTION = `You are a skeptical AI industry intelligence analyst evaluating unconfirmed rumors, leaks, media scoops, community discussions, and early research signals.
+
+For each candidate item, return a structured JSON assessment:
+- Set is_relevant = false ONLY for obvious spam or items unrelated to AI models, products, tooling, chips, or AI labs.
+- vendor: Identify the primary AI company or ecosystem (e.g., "OpenAI", "Anthropic", "Google", "xAI", "Meta", "DeepSeek", "Cursor", "NVIDIA", "Hugging Face", or "Industry").
+- headline: Clear, neutral English headline (max 90 chars) without clickbait.
+- summary: 2 concise, factual English bullet points summarizing what is being reported.
+- rumorType:
+  - "unreleased_leak": Code strings, UI screenshots, A/B tests, feature flags, or leaked specs.
+  - "insider_report": Press reporting citing internal sources or executives.
+  - "community_buzz": Hacker News / developer community threads or benchmarks.
+  - "early_research": Preprints, daily papers, or open-weight research signals.
+- credibility & credibilityScore (0-100):
+  - "high" (75-100): Backed by verifiable code/UI artifacts, reproducible benchmarks, or multiple reputable outlets.
+  - "medium" (45-74): Plausible named-source reporting or strong community technical analysis, still unconfirmed by vendor.
+  - "low" (15-44): Anonymous single-source claims, vague hints, or speculative commentary.
+  - "unverified" (0-60): Early claim lacking corroboration or testable artifacts.
+- evidenceBasis: Choose the closest fit from "code_or_ui_artifact", "multiple_reports", "named_insider", "single_source", or "speculation".
+- claim: 1 crisp sentence stating the core unconfirmed claim.
+- evidenceSummary: 1-2 sentences explaining what supporting evidence or artifacts exist in the item.
+- caveat: 1 sentence stating what remains unconfirmed, missing, or uncertain.`;
+
+export async function getRumorEvaluatorInfo(): Promise<{
+  mode: "gemini" | "rule";
+  model: string;
+}> {
+  const apiKey = await getEnvVar("GEMINI_API_KEY");
+  const model = (await getEnvVar("GEMINI_RUMOR_MODEL")) || DEFAULT_GEMINI_RUMOR_MODEL;
+  return {
+    mode: apiKey ? "gemini" : "rule",
+    model,
   };
-  const raw = data.choices?.[0]?.message?.content;
-  return raw ? parseLlmJson(raw) : null;
 }
 
-function classifyByRules(source: SourceConfig, candidate: RawCandidate): {
+function normalizeImportance(val: unknown, fallback: Importance): Importance {
+  return val === "major" || val === "minor" || val === "patch" ? val : fallback;
+}
+
+function normalizeCategory(val: unknown, fallback: Category): Category {
+  const allowed: Category[] = [
+    "new_model",
+    "new_feature",
+    "pricing",
+    "deprecation",
+    "coding_tool",
+    "bugfix",
+    "research",
+  ];
+  return typeof val === "string" && allowed.includes(val as Category)
+    ? (val as Category)
+    : fallback;
+}
+
+function normalizeAudiences(val: unknown, fallback: Audience[]): Audience[] {
+  if (!Array.isArray(val)) return fallback;
+  const filtered = val.filter((v): v is Audience => v === "developer" || v === "general");
+  return filtered.length > 0 ? Array.from(new Set(filtered)) : fallback;
+}
+
+function normalizeCredibility(val: unknown, fallback: CredibilityLevel): CredibilityLevel {
+  return val === "high" || val === "medium" || val === "low" || val === "unverified"
+    ? val
+    : fallback;
+}
+
+function normalizeEvidenceBasis(val: unknown, fallback: EvidenceBasis): EvidenceBasis {
+  const allowed: EvidenceBasis[] = [
+    "code_or_ui_artifact",
+    "multiple_reports",
+    "named_insider",
+    "single_source",
+    "speculation",
+  ];
+  return typeof val === "string" && allowed.includes(val as EvidenceBasis)
+    ? (val as EvidenceBasis)
+    : fallback;
+}
+
+function normalizeRumorType(val: unknown, fallback: RumorType): RumorType {
+  const allowed: RumorType[] = [
+    "unreleased_leak",
+    "insider_report",
+    "community_buzz",
+    "early_research",
+  ];
+  return typeof val === "string" && allowed.includes(val as RumorType)
+    ? (val as RumorType)
+    : fallback;
+}
+
+function clampScore(val: unknown, fallback: number): number {
+  if (typeof val !== "number" || !Number.isFinite(val)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(val)));
+}
+
+function classifyByRules(
+  source: SourceConfig,
+  candidate: RawCandidate
+): {
   importance: Importance;
   audiences: Audience[];
   category: Category;
-  titleKo: string;
-  summaryKo: string[];
+  headline: string;
+  summary: string[];
   devImpact?: string;
 } {
   const haystack = `${candidate.title}\n${candidate.rawText}`.toLowerCase();
@@ -133,7 +225,7 @@ function classifyByRules(source: SourceConfig, candidate: RawCandidate): {
 
   if (
     semverMajor ||
-    /\b(introducing|announcing|launch|launching|release|released|deprecat|pricing|price cut|gpt-5|gpt-4|claude|gemini|o3|o4|sonnet|opus)\b/.test(
+    /\b(introducing|announcing|launch|launching|release|released|deprecat|pricing|price cut|gpt-5|gpt-6|gpt-4|claude|gemini|o3|o4|sonnet|opus)\b/.test(
       haystack
     )
   ) {
@@ -179,123 +271,308 @@ function classifyByRules(source: SourceConfig, candidate: RawCandidate): {
     .map((line) => compactWhitespace(line.replace(/^[-*•#]+\s*/, "")))
     .filter((line) => line.length >= 12 && line.toLowerCase() !== candidate.title.toLowerCase());
 
-  const summaryKo: string[] = [];
+  const summary: string[] = [];
   if (source.type === "openrouter_models") {
     const ctxLine = lines.find((l) => l.startsWith("Context Length:"));
     const priceLine = lines.find((l) => l.startsWith("Pricing:"));
     const descLine = lines.find((l) => l.startsWith("Description:"));
-    if (ctxLine) summaryKo.push(ctxLine.replace("Context Length:", "컨텍스트 한도:"));
-    if (priceLine) summaryKo.push(priceLine.replace("Pricing:", "토큰 단가:"));
+    if (ctxLine) summary.push(ctxLine.replace("Context Length:", "Context window:"));
+    if (priceLine) summary.push(priceLine);
     if (descLine) {
-      summaryKo.push(descLine.replace("Description:", "").trim().slice(0, 160));
+      summary.push(descLine.replace("Description:", "").trim().slice(0, 180));
     }
   } else {
     for (const line of lines) {
-      if (summaryKo.length >= 3) break;
-      const truncated = line.length > 160 ? `${line.slice(0, 157)}...` : line;
-      if (!summaryKo.includes(truncated)) summaryKo.push(truncated);
+      if (summary.length >= 3) break;
+      const truncated = line.length > 180 ? `${line.slice(0, 177)}...` : line;
+      if (!summary.includes(truncated)) summary.push(truncated);
     }
   }
 
-  if (summaryKo.length === 0) {
-    summaryKo.push(`${source.name} 공식 채널에 새 업데이트가 등록되었습니다.`);
+  if (summary.length === 0) {
+    summary.push(`Published on the official ${source.name} channel.`);
   }
 
   const devImpact = audiences.has("developer")
     ? source.defaultCategory === "coding_tool"
-      ? `${source.name} 버전/기능 변경점 확인 필요`
-      : "API/모델 사양 및 공식 문서 변경 여부 확인"
+      ? `Review ${source.name} release notes for SDK, CLI, or workflow changes.`
+      : "Check model specifications, pricing, or API documentation updates."
     : undefined;
 
   return {
     importance,
     audiences: Array.from(audiences),
     category,
-    titleKo: candidate.title,
-    summaryKo,
+    headline: candidate.title,
+    summary,
     devImpact,
   };
 }
 
-function normalizeImportance(val: unknown, fallback: Importance): Importance {
-  return val === "major" || val === "minor" || val === "patch" ? val : fallback;
+function inferVendorFromText(source: SourceConfig, text: string): string {
+  const lower = text.toLowerCase();
+  if (/\b(openai|chatgpt|gpt-?\d|sora|codex)\b/.test(lower)) return "OpenAI";
+  if (/\b(anthropic|claude)\b/.test(lower)) return "Anthropic";
+  if (/\b(google|gemini|deepmind|veo|notebooklm)\b/.test(lower)) return "Google";
+  if (/\b(xai|grok)\b/.test(lower)) return "xAI";
+  if (/\b(meta|llama)\b/.test(lower)) return "Meta";
+  if (/\b(deepseek)\b/.test(lower)) return "DeepSeek";
+  if (/\b(cursor)\b/.test(lower)) return "Cursor";
+  if (/\b(nvidia|cuda|blackwell|rubin)\b/.test(lower)) return "NVIDIA";
+  if (/\b(hugging\s*face)\b/.test(lower)) return "Hugging Face";
+  if (/\b(mistral)\b/.test(lower)) return "Mistral";
+  return source.vendor;
 }
 
-function normalizeCategory(val: unknown, fallback: Category): Category {
-  const allowed: Category[] = [
-    "new_model",
-    "new_feature",
-    "pricing",
-    "deprecation",
-    "coding_tool",
-    "bugfix",
-    "research",
-  ];
-  return typeof val === "string" && allowed.includes(val as Category) ? (val as Category) : fallback;
-}
-
-function normalizeAudiences(val: unknown, fallback: Audience[]): Audience[] {
-  if (!Array.isArray(val)) return fallback;
-  const filtered = val.filter((v): v is Audience => v === "developer" || v === "general");
-  return filtered.length > 0 ? Array.from(new Set(filtered)) : fallback;
-}
-
-export async function summarizeCandidate(
-  source: SourceConfig,
-  candidate: RawCandidate,
-  useLlm: boolean
-): Promise<{ item: UpdateItem | null; usedLlm: boolean }> {
+export function buildOfficialItem(source: SourceConfig, candidate: RawCandidate): UpdateItem {
   const nowIso = new Date().toISOString();
-  const ruleFallback = classifyByRules(source, candidate);
+  const base = classifyByRules(source, candidate);
 
-  let llmResult: LlmClassification | null = null;
-  let summarizedBy: "gemini" | "openai" | "rule" = "rule";
-
-  if (useLlm) {
-    const geminiKey = await getEnvVar("GEMINI_API_KEY");
-    const openaiKey = await getEnvVar("OPENAI_API_KEY");
-    const prompt = buildPrompt(source, candidate);
-
-    try {
-      if (geminiKey) {
-        llmResult = await callGemini(prompt, geminiKey);
-        if (llmResult) summarizedBy = "gemini";
-      } else if (openaiKey) {
-        llmResult = await callOpenAI(prompt, openaiKey);
-        if (llmResult) summarizedBy = "openai";
-      }
-    } catch {
-      llmResult = null;
-      summarizedBy = "rule";
-    }
-  }
-
-  if (llmResult?.is_meaningful === false) {
-    return { item: null, usedLlm: summarizedBy !== "rule" };
-  }
-
-  const summaryKo =
-    Array.isArray(llmResult?.summaryKo) && llmResult.summaryKo.length > 0
-      ? llmResult.summaryKo.map((s) => compactWhitespace(String(s))).filter(Boolean).slice(0, 3)
-      : ruleFallback.summaryKo;
-
-  const item: UpdateItem = {
+  return {
     id: candidate.externalId,
+    track: "official",
     sourceId: source.id,
     sourceName: source.name,
     vendor: source.vendor,
     title: candidate.title,
-    titleKo: llmResult?.titleKo?.trim() || ruleFallback.titleKo,
-    summaryKo,
-    importance: normalizeImportance(llmResult?.importance, ruleFallback.importance),
-    audiences: normalizeAudiences(llmResult?.audiences, ruleFallback.audiences),
-    category: normalizeCategory(llmResult?.category, ruleFallback.category),
-    devImpact: llmResult?.devImpact?.trim() || ruleFallback.devImpact,
+    headline: base.headline,
+    summary: base.summary,
+    importance: base.importance,
+    audiences: base.audiences,
+    category: base.category,
+    devImpact: base.devImpact,
     url: candidate.url,
     publishedAt: candidate.publishedAt,
     collectedAt: nowIso,
-    summarizedBy,
+    evaluatedBy: "rule",
+  };
+}
+
+export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCandidate): UpdateItem {
+  const nowIso = new Date().toISOString();
+  const base = classifyByRules(source, candidate);
+  const haystack = `${candidate.title}\n${candidate.rawText}`.toLowerCase();
+  const vendor = inferVendorFromText(source, `${candidate.title}\n${candidate.rawText}`);
+
+  let rumorType: RumorType = "insider_report";
+  let evidenceBasis: EvidenceBasis = "single_source";
+  let credibility: CredibilityLevel = "unverified";
+  let credibilityScore = 45;
+  let evidenceSummary = `Reported by ${source.name}; awaiting official vendor confirmation.`;
+  let caveat = "No official vendor announcement or primary documentation links were detected.";
+
+  if (source.type === "hf_daily_papers") {
+    rumorType = "early_research";
+    evidenceBasis = "code_or_ui_artifact";
+    credibility = "high";
+    credibilityScore = 76;
+    evidenceSummary = `Listed on Hugging Face Daily Papers with community upvotes and preprint abstract.`;
+    caveat = "Research preprints do not guarantee immediate commercial product rollout.";
+  } else if (source.type === "hn_algolia") {
+    rumorType = "community_buzz";
+    evidenceBasis = "multiple_reports";
+    credibility = "medium";
+    credibilityScore = 58;
+    evidenceSummary = `Trending developer discussion on Hacker News with active technical scrutiny.`;
+    caveat = "Community thread sentiment and claims vary; inspect linked primary artifact.";
+  } else if (
+    source.id === "testingcatalog" ||
+    /\b(feature flag|apk|webapp|spotted|hidden|ui|screenshot|code|teardown|unreleased)\b/.test(
+      haystack
+    )
+  ) {
+    rumorType = "unreleased_leak";
+    evidenceBasis = "code_or_ui_artifact";
+    credibility = "medium";
+    credibilityScore = 66;
+    evidenceSummary = `References observed UI, client code, or staged feature flags prior to release.`;
+    caveat = "Staged experiments and feature flags can change or be cancelled before launch.";
+  } else if (/\b(reuters|bloomberg|the information|financial times|wsj|exclusive)\b/.test(haystack)) {
+    rumorType = "insider_report";
+    evidenceBasis = "named_insider";
+    credibility = "medium";
+    credibilityScore = 62;
+    evidenceSummary = `Cites press reporting or industry insiders; details remain unconfirmed publicly.`;
+    caveat = "Timelines, pricing, and final product scope may shift before official release.";
+  } else if (/\b(rumor|allegedly|unconfirmed|speculat)\b/.test(haystack)) {
+    rumorType = "insider_report";
+    evidenceBasis = "speculation";
+    credibility = "low";
+    credibilityScore = 32;
+    evidenceSummary = `Circulating industry claim without attached technical artifacts.`;
+    caveat = "Treat as unverified until corroborated by independent sources or vendor confirmation.";
+  }
+
+  const rumor: RumorEvaluation = {
+    credibility,
+    credibilityScore,
+    evidenceBasis,
+    rumorType,
+    claim: candidate.title,
+    evidenceSummary,
+    caveat,
+    evaluatedBy: "rule",
   };
 
-  return { item, usedLlm: summarizedBy !== "rule" };
+  return {
+    id: candidate.externalId,
+    track: "rumor",
+    sourceId: source.id,
+    sourceName: source.name,
+    vendor,
+    title: candidate.title,
+    headline: base.headline,
+    summary: base.summary.slice(0, 2),
+    importance: base.importance,
+    audiences: base.audiences,
+    category: base.category,
+    rumor,
+    url: candidate.url,
+    publishedAt: candidate.publishedAt,
+    collectedAt: nowIso,
+    evaluatedBy: "rule",
+  };
+}
+
+function parseGeminiBatchJson(text: string): GeminiRumorItemResult[] {
+  const cleaned = text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(cleaned.slice(start, end + 1)) as {
+      items?: GeminiRumorItemResult[];
+    };
+    return Array.isArray(parsed.items) ? parsed.items : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function evaluateRumorBatch(
+  entries: Array<{ source: SourceConfig; candidate: RawCandidate }>,
+  allowGemini: boolean
+): Promise<{
+  items: UpdateItem[];
+  geminiEvaluatedCount: number;
+  modelUsed: string | null;
+}> {
+  if (entries.length === 0) {
+    return { items: [], geminiEvaluatedCount: 0, modelUsed: null };
+  }
+
+  const apiKey = allowGemini ? await getEnvVar("GEMINI_API_KEY") : undefined;
+  const model = (await getEnvVar("GEMINI_RUMOR_MODEL")) || DEFAULT_GEMINI_RUMOR_MODEL;
+
+  if (!apiKey) {
+    return {
+      items: entries.map(({ source, candidate }) => buildHeuristicRumorItem(source, candidate)),
+      geminiEvaluatedCount: 0,
+      modelUsed: null,
+    };
+  }
+
+  const client = new GoogleGenAI({ apiKey });
+  const results: UpdateItem[] = [];
+  let geminiEvaluatedCount = 0;
+
+  for (let i = 0; i < entries.length; i += RUMOR_BATCH_SIZE) {
+    const chunk = entries.slice(i, i + RUMOR_BATCH_SIZE);
+    const payload = chunk.map(({ source, candidate }) => ({
+      id: candidate.externalId,
+      source: source.name,
+      sourceType: source.type,
+      publishedAt: candidate.publishedAt,
+      title: candidate.title,
+      url: candidate.url,
+      excerpt: candidate.rawText.slice(0, 1200),
+    }));
+
+    let evaluatedById = new Map<string, GeminiRumorItemResult>();
+    try {
+      const interaction = await client.interactions.create({
+        model,
+        system_instruction: RUMOR_SYSTEM_INSTRUCTION,
+        input: `Evaluate the following ${chunk.length} AI rumor/signal items and return JSON matching the schema:\n\n${JSON.stringify(
+          payload,
+          null,
+          2
+        )}`,
+        store: false,
+        response_format: {
+          type: "text",
+          mime_type: "application/json",
+          schema: RUMOR_BATCH_JSON_SCHEMA,
+        },
+      });
+
+      const parsedItems = interaction.output_text
+        ? parseGeminiBatchJson(interaction.output_text)
+        : [];
+      evaluatedById = new Map(
+        parsedItems
+          .filter((item): item is GeminiRumorItemResult & { id: string } => typeof item.id === "string")
+          .map((item) => [item.id, item])
+      );
+    } catch (err) {
+      console.error("[gemini rumor eval] batch failed, falling back to rules:", err);
+    }
+
+    for (const { source, candidate } of chunk) {
+      const fallbackItem = buildHeuristicRumorItem(source, candidate);
+      const gem = evaluatedById.get(candidate.externalId);
+
+      if (!gem) {
+        results.push(fallbackItem);
+        continue;
+      }
+
+      if (gem.is_relevant === false) {
+        continue;
+      }
+
+      const fallbackRumor = fallbackItem.rumor!;
+      const summary =
+        Array.isArray(gem.summary) && gem.summary.length > 0
+          ? gem.summary.map((s) => compactWhitespace(String(s))).filter(Boolean).slice(0, 3)
+          : fallbackItem.summary;
+
+      const rumor: RumorEvaluation = {
+        credibility: normalizeCredibility(gem.credibility, fallbackRumor.credibility),
+        credibilityScore: clampScore(gem.credibilityScore, fallbackRumor.credibilityScore),
+        evidenceBasis: normalizeEvidenceBasis(gem.evidenceBasis, fallbackRumor.evidenceBasis),
+        rumorType: normalizeRumorType(gem.rumorType, fallbackRumor.rumorType),
+        claim: compactWhitespace(gem.claim || "") || fallbackRumor.claim,
+        evidenceSummary:
+          compactWhitespace(gem.evidenceSummary || "") || fallbackRumor.evidenceSummary,
+        caveat: compactWhitespace(gem.caveat || "") || fallbackRumor.caveat,
+        evaluatedBy: "gemini",
+        model,
+      };
+
+      results.push({
+        ...fallbackItem,
+        vendor: compactWhitespace(gem.vendor || "") || fallbackItem.vendor,
+        headline: compactWhitespace(gem.headline || "") || fallbackItem.headline,
+        summary,
+        importance: normalizeImportance(gem.importance, fallbackItem.importance),
+        audiences: normalizeAudiences(gem.audiences, fallbackItem.audiences),
+        category: normalizeCategory(gem.category, fallbackItem.category),
+        rumor,
+        evaluatedBy: "gemini",
+      });
+      geminiEvaluatedCount++;
+    }
+  }
+
+  return {
+    items: results,
+    geminiEvaluatedCount,
+    modelUsed: geminiEvaluatedCount > 0 ? model : null,
+  };
 }

@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   Filter,
   Loader2,
+  Radar,
   Radio,
   RefreshCw,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Star,
   Terminal,
@@ -19,20 +23,29 @@ import {
 import type {
   Audience,
   Category,
+  CredibilityLevel,
+  EvidenceBasis,
   Importance,
+  RumorType,
   SourceConfig,
   SourceType,
   SyncResult,
   SyncSourceReport,
+  Track,
   UpdateItem,
 } from "@/lib/types";
+
+interface EvaluatorInfo {
+  mode: "gemini" | "rule";
+  model: string;
+}
 
 interface UpdateFeedClientProps {
   initialUpdates: UpdateItem[];
   initialLastSyncedAt: string | null;
   initialSyncLogs: SyncSourceReport[];
   sources: SourceConfig[];
-  llmProvider: "gemini" | "openai" | "rule";
+  evaluator: EvaluatorInfo;
 }
 
 const SUBSCRIPTIONS_KEY = "intelligence-update:pinned-vendors";
@@ -41,13 +54,13 @@ const VISIBILITY_THROTTLE_MS = 30 * 1000;
 const CLOCK_TICK_MS = 30 * 1000;
 
 const CATEGORY_LABELS: Record<Category, string> = {
-  new_model: "신규 모델",
-  new_feature: "새 기능",
-  pricing: "가격/한도",
-  deprecation: "지원 종료",
-  coding_tool: "코딩 툴/SDK",
-  bugfix: "버그 수정",
-  research: "리서치",
+  new_model: "New Model",
+  new_feature: "New Feature",
+  pricing: "Pricing & Limits",
+  deprecation: "Deprecation",
+  coding_tool: "Coding Tool / SDK",
+  bugfix: "Bug Fix",
+  research: "Research",
 };
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
@@ -55,6 +68,8 @@ const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   atom: "GitHub Atom",
   openrouter_models: "Model API",
   html_changelog: "Changelog Diff",
+  hn_algolia: "HN API",
+  hf_daily_papers: "HF Papers API",
 };
 
 const IMPORTANCE_STYLES: Record<Importance, { label: string; className: string }> = {
@@ -72,19 +87,64 @@ const IMPORTANCE_STYLES: Record<Importance, { label: string; className: string }
   },
 };
 
-function formatRelativeTimeKo(iso: string | null, nowMs: number): string {
-  if (!iso) return "동기화 기록 없음";
+const CREDIBILITY_STYLES: Record<
+  CredibilityLevel,
+  { label: string; className: string; icon: typeof ShieldCheck }
+> = {
+  high: {
+    label: "HIGH",
+    className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    icon: ShieldCheck,
+  },
+  medium: {
+    label: "MEDIUM",
+    className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+    icon: AlertTriangle,
+  },
+  low: {
+    label: "LOW",
+    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+    icon: ShieldAlert,
+  },
+  unverified: {
+    label: "UNVERIFIED",
+    className: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+    icon: AlertCircle,
+  },
+};
+
+const RUMOR_TYPE_LABELS: Record<RumorType, string> = {
+  unreleased_leak: "Unreleased Leak",
+  insider_report: "Insider Report",
+  community_buzz: "Community Buzz",
+  early_research: "Early Research",
+};
+
+const EVIDENCE_BASIS_LABELS: Record<EvidenceBasis, string> = {
+  code_or_ui_artifact: "Code / UI Artifact",
+  multiple_reports: "Multiple Reports",
+  named_insider: "Named Insider",
+  single_source: "Single Source",
+  speculation: "Speculation",
+};
+
+function formatRelativeTime(iso: string | null, nowMs: number): string {
+  if (!iso) return "Never synced";
   const time = new Date(iso).getTime();
-  if (Number.isNaN(time)) return "시간 불명";
+  if (Number.isNaN(time)) return "Unknown";
   const diffSec = Math.floor((nowMs - time) / 1000);
-  if (diffSec < 60) return "방금 전";
+  if (diffSec < 60) return "Just now";
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}분 전`;
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 전`;
+  if (diffHour < 24) return `${diffHour}h ago`;
   const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 30) return `${diffDay}일 전`;
-  return new Date(iso).toLocaleDateString("ko-KR");
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function UpdateFeedClient({
@@ -92,16 +152,28 @@ export function UpdateFeedClient({
   initialLastSyncedAt,
   initialSyncLogs,
   sources,
-  llmProvider,
+  evaluator: initialEvaluator,
 }: UpdateFeedClientProps) {
   const [updates, setUpdates] = useState<UpdateItem[]>(initialUpdates);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(initialLastSyncedAt);
   const [syncLogs, setSyncLogs] = useState<SyncSourceReport[]>(initialSyncLogs);
+  const [evaluator, setEvaluator] = useState<EvaluatorInfo>(initialEvaluator);
 
+  const [activeTrack, setActiveTrack] = useState<Track>("official");
+
+  // Official filters
   const [audienceFilter, setAudienceFilter] = useState<"all" | Audience>("all");
   const [majorOnly, setMajorOnly] = useState(false);
   const [subscribedOnly, setSubscribedOnly] = useState(false);
-  const [selectedVendor, setSelectedVendor] = useState<string>("all");
+  const [selectedOfficialVendor, setSelectedOfficialVendor] = useState<string>("all");
+
+  // Rumor filters
+  const [credibilityFilter, setCredibilityFilter] = useState<
+    "all" | "high" | "medium_plus" | "unverified_low"
+  >("all");
+  const [rumorTypeFilter, setRumorTypeFilter] = useState<"all" | RumorType>("all");
+  const [selectedRumorVendor, setSelectedRumorVendor] = useState<string>("all");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [pinnedVendors, setPinnedVendors] = useState<string[]>([
     "OpenAI",
@@ -143,15 +215,17 @@ export function UpdateFeedClient({
         updates?: UpdateItem[];
         syncLogs?: SyncSourceReport[];
         lastSyncedAt?: string | null;
+        evaluator?: EvaluatorInfo;
       };
       if (Array.isArray(data.updates)) setUpdates(data.updates);
       if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
       if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
+      if (data.evaluator) setEvaluator(data.evaluator);
       const now = Date.now();
       lastFetchedAtRef.current = now;
       setNowMs(now);
     } catch {
-      // ignore transient polling errors
+      // Ignore transient polling errors
     } finally {
       isPollingRef.current = false;
     }
@@ -201,42 +275,106 @@ export function UpdateFeedClient({
     });
   };
 
-  const vendors = useMemo(
-    () => Array.from(new Set(sources.map((s) => s.vendor))),
+  const officialItems = useMemo(
+    () => updates.filter((u) => u.track === "official"),
+    [updates]
+  );
+  const rumorItems = useMemo(() => updates.filter((u) => u.track === "rumor"), [updates]);
+
+  const officialVendors = useMemo(
+    () =>
+      Array.from(
+        new Set(sources.filter((s) => s.track === "official").map((s) => s.vendor))
+      ),
     [sources]
   );
 
+  const rumorVendors = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of rumorItems) {
+      if (item.vendor) set.add(item.vendor);
+    }
+    return Array.from(set);
+  }, [rumorItems]);
+
+  const activeVendors = activeTrack === "official" ? officialVendors : rumorVendors;
+  const selectedVendor =
+    activeTrack === "official" ? selectedOfficialVendor : selectedRumorVendor;
+  const setSelectedVendor =
+    activeTrack === "official" ? setSelectedOfficialVendor : setSelectedRumorVendor;
+
   const filteredUpdates = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return updates.filter((item) => {
-      if (audienceFilter !== "all" && !item.audiences.includes(audienceFilter)) {
-        return false;
+    const base = activeTrack === "official" ? officialItems : rumorItems;
+
+    return base.filter((item) => {
+      if (activeTrack === "official") {
+        if (audienceFilter !== "all" && !item.audiences.includes(audienceFilter)) {
+          return false;
+        }
+        if (majorOnly && item.importance !== "major") {
+          return false;
+        }
+        if (subscribedOnly && !pinnedVendors.includes(item.vendor)) {
+          return false;
+        }
+        if (selectedOfficialVendor !== "all" && item.vendor !== selectedOfficialVendor) {
+          return false;
+        }
+      } else {
+        const cred = item.rumor?.credibility ?? "unverified";
+        if (credibilityFilter === "high" && cred !== "high") return false;
+        if (credibilityFilter === "medium_plus" && cred !== "high" && cred !== "medium") {
+          return false;
+        }
+        if (
+          credibilityFilter === "unverified_low" &&
+          cred !== "unverified" &&
+          cred !== "low"
+        ) {
+          return false;
+        }
+        if (rumorTypeFilter !== "all" && item.rumor?.rumorType !== rumorTypeFilter) {
+          return false;
+        }
+        if (selectedRumorVendor !== "all" && item.vendor !== selectedRumorVendor) {
+          return false;
+        }
       }
-      if (majorOnly && item.importance !== "major") {
-        return false;
-      }
-      if (subscribedOnly && !pinnedVendors.includes(item.vendor)) {
-        return false;
-      }
-      if (selectedVendor !== "all" && item.vendor !== selectedVendor) {
-        return false;
-      }
+
       if (q) {
         const haystack = [
           item.title,
-          item.titleKo,
+          item.headline,
           item.vendor,
           item.sourceName,
-          ...item.summaryKo,
+          ...item.summary,
           item.devImpact ?? "",
+          item.rumor?.claim ?? "",
+          item.rumor?.evidenceSummary ?? "",
+          item.rumor?.caveat ?? "",
         ]
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
+
       return true;
     });
-  }, [updates, audienceFilter, majorOnly, subscribedOnly, pinnedVendors, selectedVendor, searchQuery]);
+  }, [
+    activeTrack,
+    officialItems,
+    rumorItems,
+    audienceFilter,
+    majorOnly,
+    subscribedOnly,
+    pinnedVendors,
+    selectedOfficialVendor,
+    credibilityFilter,
+    rumorTypeFilter,
+    selectedRumorVendor,
+    searchQuery,
+  ]);
 
   const handleSyncNow = async () => {
     if (isSyncing) return;
@@ -250,31 +388,36 @@ export function UpdateFeedClient({
         updates?: UpdateItem[];
         syncLogs?: SyncSourceReport[];
         lastSyncedAt?: string | null;
+        evaluator?: EvaluatorInfo;
         error?: string;
       };
       if (!res.ok || data.error) {
-        throw new Error(data.error || "동기화 요청에 실패했습니다.");
+        throw new Error(data.error || "Sync request failed.");
       }
       if (Array.isArray(data.updates)) setUpdates(data.updates);
       if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
       if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
+      if (data.evaluator) setEvaluator(data.evaluator);
       const now = Date.now();
       lastFetchedAtRef.current = now;
       setNowMs(now);
 
       const newCount = data.result?.totalNew ?? 0;
       const fetchedCount = data.result?.totalFetched ?? 0;
+      const geminiCount = data.result?.rumorsEvaluatedCount ?? 0;
       setToast({
         type: "ok",
         message:
           newCount > 0
-            ? `새 업데이트 ${newCount}건을 반영했습니다 (총 ${fetchedCount}건 확인).`
-            : `최신 상태입니다 (${fetchedCount}건 확인, 새 변경점 없음).`,
+            ? `Synced ${newCount} new items (${fetchedCount} checked${
+                geminiCount > 0 ? `, ${geminiCount} rumors evaluated by Gemini` : ""
+              }).`
+            : `Up to date (${fetchedCount} items checked, no new updates).`,
       });
     } catch (err) {
       setToast({
         type: "error",
-        message: err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.",
+        message: err instanceof Error ? err.message : "An error occurred while syncing.",
       });
     } finally {
       isSyncingRef.current = false;
@@ -292,6 +435,29 @@ export function UpdateFeedClient({
     [syncLogs]
   );
 
+  const officialSources = useMemo(
+    () => sources.filter((s) => s.track === "official"),
+    [sources]
+  );
+  const rumorSources = useMemo(
+    () => sources.filter((s) => s.track === "rumor"),
+    [sources]
+  );
+
+  const resetActiveFilters = () => {
+    setSearchQuery("");
+    if (activeTrack === "official") {
+      setAudienceFilter("all");
+      setMajorOnly(false);
+      setSubscribedOnly(false);
+      setSelectedOfficialVendor("all");
+    } else {
+      setCredibilityFilter("all");
+      setRumorTypeFilter("all");
+      setSelectedRumorVendor("all");
+    }
+  };
+
   return (
     <div className="min-h-screen pb-16">
       {/* Header */}
@@ -303,24 +469,23 @@ export function UpdateFeedClient({
                 IU
               </span>
               <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                지능 업데이트
+                Intelligence Update
               </h1>
-              <span className="text-xs font-medium text-slate-400">Intelligence Update</span>
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                  llmProvider === "rule"
-                    ? "bg-slate-100 text-slate-600"
-                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                  evaluator.mode === "gemini"
+                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
                 }`}
               >
                 <Sparkles className="h-3 w-3" />
-                {llmProvider === "rule"
-                  ? "규칙 요약 모드"
-                  : `AI 요약 활성 (${llmProvider.toUpperCase()})`}
+                {evaluator.mode === "gemini"
+                  ? `Gemini Rumor Eval · ${evaluator.model}`
+                  : "Heuristic Rumor Eval (Add GEMINI_API_KEY)"}
               </span>
             </div>
             <p className="mt-1.5 text-sm text-slate-600">
-              “AI, 오늘 또 똑똑해졌나?” — 공식 변경점만 골라 3줄로 정리합니다.
+              Official AI releases &amp; Gemini-evaluated rumor radar — zero fluff.
             </p>
           </div>
 
@@ -331,7 +496,7 @@ export function UpdateFeedClient({
               className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
               <Radio className="h-3.5 w-3.5 text-emerald-600" />
-              <span>모니터링 소스 ({sources.length}개)</span>
+              <span>Sources ({sources.length})</span>
             </button>
 
             <button
@@ -345,7 +510,7 @@ export function UpdateFeedClient({
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
-              <span>{isSyncing ? "수집 중..." : "지금 업데이트 확인"}</span>
+              <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>
             </button>
           </div>
         </div>
@@ -355,27 +520,86 @@ export function UpdateFeedClient({
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs text-slate-500">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
-                마지막 확인:{" "}
+                Last checked:{" "}
                 <strong
                   suppressHydrationWarning
                   title={
-                    lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("ko-KR") : undefined
+                    lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("en-US") : undefined
                   }
                   className="font-medium text-slate-700"
                 >
-                  {formatRelativeTimeKo(lastSyncedAt, nowMs)}
+                  {formatRelativeTime(lastSyncedAt, nowMs)}
                 </strong>
               </span>
               <span className="inline-flex items-center gap-1.5 text-slate-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>매시 정각 자동 수집 · 5분마다 화면 갱신</span>
+                <span>Auto-sync hourly · Auto-refresh every 5m</span>
               </span>
             </div>
             <span>
-              표시 중{" "}
-              <strong className="font-semibold text-slate-800">{filteredUpdates.length}</strong>건 /
-              전체 {updates.length}건
+              Showing{" "}
+              <strong className="font-semibold text-slate-800">{filteredUpdates.length}</strong>{" "}
+              of{" "}
+              {activeTrack === "official" ? officialItems.length : rumorItems.length}
             </span>
+          </div>
+        </div>
+
+        {/* Primary Track Tabs */}
+        <div className="border-t border-slate-100 bg-white">
+          <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => setActiveTrack("official")}
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                activeTrack === "official"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span>Official Updates</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                  activeTrack === "official"
+                    ? "bg-white/15 text-white"
+                    : "bg-white text-slate-600"
+                }`}
+              >
+                {officialItems.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTrack("rumor")}
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                activeTrack === "rumor"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+              }`}
+            >
+              <Radar className="h-4 w-4" />
+              <span>Rumor Radar</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                  activeTrack === "rumor"
+                    ? "bg-white/20 text-white"
+                    : "bg-white text-slate-600"
+                }`}
+              >
+                {rumorItems.length}
+              </span>
+              <span
+                className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:inline-block ${
+                  activeTrack === "rumor"
+                    ? "bg-amber-700/60 text-amber-50"
+                    : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                }`}
+              >
+                AI Credibility &amp; Evidence
+              </span>
+            </button>
           </div>
         </div>
       </header>
@@ -402,7 +626,7 @@ export function UpdateFeedClient({
               type="button"
               onClick={() => setToast(null)}
               className="rounded p-1 hover:bg-black/5"
-              aria-label="알림 닫기"
+              aria-label="Dismiss notification"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -413,73 +637,116 @@ export function UpdateFeedClient({
       {/* Sticky Filter Bar */}
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3">
-          {/* Row 1: Audience + Major/Subscribed Toggles + Search */}
+          {/* Row 1: Track-specific Filters + Search */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(
-                [
-                  { id: "all", label: "전체", icon: Filter },
-                  { id: "developer", label: "개발자", icon: Terminal },
-                  { id: "general", label: "일반·직장인", icon: User },
-                ] as const
-              ).map(({ id, label, icon: Icon }) => {
-                const active = audienceFilter === id;
-                return (
+            {activeTrack === "official" ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: "all", label: "All", icon: Filter },
+                    { id: "developer", label: "Developers", icon: Terminal },
+                    { id: "general", label: "General", icon: User },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => {
+                  const active = audienceFilter === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setAudienceFilter(id)}
+                      className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => setMajorOnly((v) => !v)}
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    majorOnly
+                      ? "bg-rose-600 text-white shadow-sm"
+                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>Major Only</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSubscribedOnly((v) => !v)}
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    subscribedOnly
+                      ? "bg-amber-500 text-white shadow-sm"
+                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  <Star className={`h-3.5 w-3.5 ${subscribedOnly ? "fill-white" : ""}`} />
+                  <span>Pinned ({pinnedVendors.length})</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: "all", label: "All Credibility" },
+                    { id: "high", label: "High" },
+                    { id: "medium_plus", label: "Medium+" },
+                    { id: "unverified_low", label: "Unverified / Low" },
+                  ] as const
+                ).map(({ id, label }) => (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setAudienceFilter(id)}
-                    className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      active
-                        ? "bg-slate-900 text-white shadow-sm"
+                    onClick={() => setCredibilityFilter(id)}
+                    className={`inline-flex min-h-[38px] items-center rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      credibilityFilter === id
+                        ? "bg-amber-600 text-white shadow-sm"
                         : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5" />
-                    <span>{label}</span>
+                    {label}
                   </button>
-                );
-              })}
+                ))}
 
-              <button
-                type="button"
-                onClick={() => setMajorOnly((v) => !v)}
-                className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  majorOnly
-                    ? "bg-rose-600 text-white shadow-sm"
-                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                <span>메이저만 보기</span>
-              </button>
+                <select
+                  value={rumorTypeFilter}
+                  onChange={(e) => setRumorTypeFilter(e.target.value as "all" | RumorType)}
+                  aria-label="Filter by rumor type"
+                  className="h-[38px] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 focus:border-slate-400 focus:outline-none"
+                >
+                  <option value="all">All Signal Types</option>
+                  <option value="unreleased_leak">Unreleased Leaks</option>
+                  <option value="insider_report">Insider Reports</option>
+                  <option value="community_buzz">Community Buzz</option>
+                  <option value="early_research">Early Research</option>
+                </select>
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => setSubscribedOnly((v) => !v)}
-                className={`inline-flex min-h-[38px] items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  subscribedOnly
-                    ? "bg-amber-500 text-white shadow-sm"
-                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                <Star className={`h-3.5 w-3.5 ${subscribedOnly ? "fill-white" : ""}`} />
-                <span>내 구독 툴만 ({pinnedVendors.length})</span>
-              </button>
-            </div>
-
-            <div className="relative w-full sm:w-56">
+            <div className="relative w-full sm:w-60">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="모델·기능·키워드 검색"
+                placeholder={
+                  activeTrack === "official"
+                    ? "Search models, features, SDKs..."
+                    : "Search rumors, claims, evidence..."
+                }
                 className="h-[38px] w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Row 2: Vendor Chips + Subscription Pin */}
+          {/* Row 2: Vendor Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
             <button
               type="button"
@@ -490,10 +757,10 @@ export function UpdateFeedClient({
                   : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
               }`}
             >
-              전체 벤더
+              All Vendors
             </button>
 
-            {vendors.map((vendor) => {
+            {activeVendors.map((vendor) => {
               const isSelected = selectedVendor === vendor;
               const isPinned = pinnedVendors.includes(vendor);
               return (
@@ -508,29 +775,33 @@ export function UpdateFeedClient({
                   <button
                     type="button"
                     onClick={() => setSelectedVendor(isSelected ? "all" : vendor)}
-                    className="py-1 pl-3 pr-1.5 text-xs font-medium"
+                    className={`py-1 pl-3 text-xs font-medium ${
+                      activeTrack === "official" ? "pr-1.5" : "pr-3"
+                    }`}
                   >
                     {vendor}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => togglePinVendor(vendor)}
-                    title={isPinned ? `${vendor} 구독 해제` : `${vendor} 구독 추가`}
-                    aria-label={`${vendor} 구독 토글`}
-                    className="rounded-r-full py-1 pl-1 pr-2.5 hover:opacity-80"
-                  >
-                    <Star
-                      className={`h-3 w-3 ${
-                        isPinned
-                          ? isSelected
-                            ? "fill-amber-300 text-amber-300"
-                            : "fill-amber-400 text-amber-400"
-                          : isSelected
-                          ? "text-indigo-200"
-                          : "text-slate-300"
-                      }`}
-                    />
-                  </button>
+                  {activeTrack === "official" && (
+                    <button
+                      type="button"
+                      onClick={() => togglePinVendor(vendor)}
+                      title={isPinned ? `Unpin ${vendor}` : `Pin ${vendor}`}
+                      aria-label={`Toggle ${vendor} subscription`}
+                      className="rounded-r-full py-1 pl-1 pr-2.5 hover:opacity-80"
+                    >
+                      <Star
+                        className={`h-3 w-3 ${
+                          isPinned
+                            ? isSelected
+                              ? "fill-amber-300 text-amber-300"
+                              : "fill-amber-400 text-amber-400"
+                            : isSelected
+                            ? "text-indigo-200"
+                            : "text-slate-300"
+                        }`}
+                      />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -540,19 +811,34 @@ export function UpdateFeedClient({
 
       {/* Main Feed */}
       <main className="mx-auto mt-4 max-w-4xl px-4">
+        {activeTrack === "rumor" && (
+          <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p>
+              <strong>Unconfirmed Signals:</strong> Items on Rumor Radar aggregate leaks,
+              insider scoops, and community discussions. Credibility scores and evidence
+              assessments are{" "}
+              {evaluator.mode === "gemini"
+                ? `evaluated by Gemini (${evaluator.model})`
+                : "generated by heuristic rules (add GEMINI_API_KEY for AI evaluation)"}
+              .
+            </p>
+          </div>
+        )}
+
         {filteredUpdates.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
             <p className="text-sm font-semibold text-slate-800">
-              {updates.length === 0
-                ? "아직 수집된 업데이트가 없습니다."
-                : "선택한 필터 조건에 맞는 업데이트가 없습니다."}
+              {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
+                ? `No ${activeTrack === "official" ? "official updates" : "rumor signals"} collected yet.`
+                : "No items match your active filters."}
             </p>
             <p className="mt-1.5 text-xs text-slate-500">
-              {updates.length === 0
-                ? "상단의 [지금 업데이트 확인] 버튼을 누르면 12개 공식 소스에서 즉시 가져옵니다."
-                : "필터를 초기화하거나 검색어를 변경해 보세요."}
+              {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
+                ? "Click Sync Now in the header to fetch the latest updates from all configured sources."
+                : "Reset filters or try a different search query."}
             </p>
-            {updates.length === 0 ? (
+            {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0 ? (
               <button
                 type="button"
                 onClick={handleSyncNow}
@@ -560,27 +846,131 @@ export function UpdateFeedClient({
                 className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                <span>지금 업데이트 가져오기</span>
+                <span>Sync Now</span>
               </button>
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setAudienceFilter("all");
-                  setMajorOnly(false);
-                  setSubscribedOnly(false);
-                  setSelectedVendor("all");
-                  setSearchQuery("");
-                }}
+                onClick={resetActiveFilters}
                 className="mt-4 inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
               >
-                필터 초기화
+                Reset Filters
               </button>
             )}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filteredUpdates.map((item) => {
+              if (item.track === "rumor" && item.rumor) {
+                const credStyle = CREDIBILITY_STYLES[item.rumor.credibility];
+                const CredIcon = credStyle.icon;
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-2xl border border-amber-200/80 bg-white p-4 shadow-xs transition hover:border-amber-300 sm:p-5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold tracking-wide ${credStyle.className}`}
+                        >
+                          <CredIcon className="h-3 w-3" />
+                          <span>
+                            {credStyle.label} · {item.rumor.credibilityScore}/100
+                          </span>
+                        </span>
+                        <span className="rounded-md bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                          {RUMOR_TYPE_LABELS[item.rumor.rumorType]}
+                        </span>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                          {EVIDENCE_BASIS_LABELS[item.rumor.evidenceBasis]}
+                        </span>
+                        <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          {item.vendor}
+                        </span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {item.sourceName}
+                        </span>
+                      </div>
+
+                      <time
+                        dateTime={item.publishedAt}
+                        title={new Date(item.publishedAt).toLocaleString("en-US")}
+                        suppressHydrationWarning
+                        className="text-xs text-slate-400"
+                      >
+                        {formatRelativeTime(item.publishedAt, nowMs)}
+                      </time>
+                    </div>
+
+                    <h2 className="mt-2.5 text-base font-bold leading-snug text-slate-900 sm:text-[17px]">
+                      {item.headline}
+                    </h2>
+
+                    {item.headline !== item.title && (
+                      <p className="mt-0.5 text-xs text-slate-400">{item.title}</p>
+                    )}
+
+                    <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-slate-700 sm:text-sm">
+                      {item.summary.map((line, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-400" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* Credibility & Evidence Assessment Panel */}
+                    <div className="mt-3.5 space-y-1.5 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 ring-1 ring-slate-200/80">
+                      <p>
+                        <span className="font-semibold text-slate-900">Core Claim: </span>
+                        {item.rumor.claim}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Evidence / Basis: </span>
+                        {item.rumor.evidenceSummary}
+                      </p>
+                      <p className="text-slate-600">
+                        <span className="font-semibold text-slate-800">
+                          Caveat / Unconfirmed:{" "}
+                        </span>
+                        {item.rumor.caveat}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-700">
+                          {CATEGORY_LABELS[item.category]}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                            item.rumor.evaluatedBy === "gemini"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {item.rumor.evaluatedBy === "gemini"
+                            ? `Evaluated by Gemini (${item.rumor.model ?? evaluator.model})`
+                            : "Heuristic Eval"}
+                        </span>
+                      </div>
+
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                      >
+                        <span>Read Source</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </article>
+                );
+              }
+
               const imp = IMPORTANCE_STYLES[item.importance];
               return (
                 <article
@@ -604,24 +994,24 @@ export function UpdateFeedClient({
 
                     <time
                       dateTime={item.publishedAt}
-                      title={new Date(item.publishedAt).toLocaleString("ko-KR")}
+                      title={new Date(item.publishedAt).toLocaleString("en-US")}
                       suppressHydrationWarning
                       className="text-xs text-slate-400"
                     >
-                      {formatRelativeTimeKo(item.publishedAt, nowMs)}
+                      {formatRelativeTime(item.publishedAt, nowMs)}
                     </time>
                   </div>
 
                   <h2 className="mt-2.5 text-base font-bold leading-snug text-slate-900 sm:text-[17px]">
-                    {item.titleKo}
+                    {item.headline}
                   </h2>
 
-                  {item.titleKo !== item.title && (
+                  {item.headline !== item.title && (
                     <p className="mt-0.5 text-xs text-slate-400">{item.title}</p>
                   )}
 
                   <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-slate-700 sm:text-sm">
-                    {item.summaryKo.map((line, idx) => (
+                    {item.summary.map((line, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-400" />
                         <span>{line}</span>
@@ -631,7 +1021,7 @@ export function UpdateFeedClient({
 
                   {item.devImpact && (
                     <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200/70">
-                      <span className="font-semibold text-slate-800">개발자 참고: </span>
+                      <span className="font-semibold text-slate-800">Developer Note: </span>
                       {item.devImpact}
                     </div>
                   )}
@@ -643,12 +1033,12 @@ export function UpdateFeedClient({
                       </span>
                       {item.audiences.includes("developer") && (
                         <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-medium text-sky-700">
-                          개발자
+                          Developers
                         </span>
                       )}
                       {item.audiences.includes("general") && (
                         <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-medium text-violet-700">
-                          일반·직장인
+                          General
                         </span>
                       )}
                     </div>
@@ -659,7 +1049,7 @@ export function UpdateFeedClient({
                       rel="noopener noreferrer"
                       className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
                     >
-                      <span>원문 보기</span>
+                      <span>Read Source</span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   </div>
@@ -683,75 +1073,85 @@ export function UpdateFeedClient({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  모니터링 소스 현황 ({sources.length}개)
+                  Monitored Sources ({sources.length})
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {syncLogs.length > 0
-                    ? `최근 동기화 정상 ${okSourceCount}/${sources.length}개`
-                    : "아직 동기화 실행 기록이 없습니다."}
+                    ? `Latest sync: ${okSourceCount}/${sources.length} healthy`
+                    : "No sync runs recorded yet."}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSourcesOpen(false)}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                aria-label="닫기"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-4 divide-y divide-slate-100">
-              {sources.map((src) => {
-                const report = logBySourceId.get(src.id);
-                return (
-                  <div key={src.id} className="flex items-start justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-900">{src.name}</span>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                          {src.vendor}
-                        </span>
-                        <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
-                          {SOURCE_TYPE_LABELS[src.type]}
-                        </span>
-                      </div>
-                      <a
-                        href={src.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 block truncate text-[11px] text-slate-400 hover:text-indigo-600"
-                      >
-                        {src.url}
-                      </a>
-                      {report?.error && (
-                        <p className="mt-1 text-[11px] text-rose-600">{report.error}</p>
-                      )}
-                    </div>
+            {[
+              { title: `Official Sources (${officialSources.length})`, items: officialSources },
+              { title: `Rumor & Signal Sources (${rumorSources.length})`, items: rumorSources },
+            ].map((group) => (
+              <div key={group.title} className="mt-4">
+                <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  {group.title}
+                </h4>
+                <div className="divide-y divide-slate-100">
+                  {group.items.map((src) => {
+                    const report = logBySourceId.get(src.id);
+                    return (
+                      <div key={src.id} className="flex items-start justify-between gap-3 py-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900">{src.name}</span>
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                              {src.vendor}
+                            </span>
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                              {SOURCE_TYPE_LABELS[src.type]}
+                            </span>
+                          </div>
+                          <a
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 block truncate text-[11px] text-slate-400 hover:text-indigo-600"
+                          >
+                            {src.url}
+                          </a>
+                          {report?.error && (
+                            <p className="mt-1 text-[11px] text-rose-600">{report.error}</p>
+                          )}
+                        </div>
 
-                    <div className="shrink-0 text-right">
-                      {report ? (
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                            report.status === "ok"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-rose-50 text-rose-700"
-                          }`}
-                        >
-                          {report.status === "ok"
-                            ? `정상 (${report.fetchedCount}건)`
-                            : "오류"}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-                          대기 중
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                        <div className="shrink-0 text-right">
+                          {report ? (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                report.status === "ok"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-rose-50 text-rose-700"
+                              }`}
+                            >
+                              {report.status === "ok"
+                                ? `OK (${report.fetchedCount})`
+                                : "Error"}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                              Pending
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
