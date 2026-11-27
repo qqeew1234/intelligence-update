@@ -83,7 +83,7 @@ const IMPORTANCE_STYLES: Record<Importance, { label: string; className: string }
   minor: {
     label: "MINOR",
     className:
-      "bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/20 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-400/25",
+      "bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/20 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/25",
   },
   patch: {
     label: "PATCH",
@@ -581,7 +581,7 @@ export function UpdateFeedClient({
               onClick={() => setActiveTrack("official")}
               className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
                 activeTrack === "official"
-                  ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                  ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
                   : "glass-inset text-neutral-700 hover:bg-black/[0.06] dark:text-neutral-300 dark:hover:bg-white/[0.09]"
               }`}
             >
@@ -591,7 +591,7 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "official"
-                    ? "bg-white/15 text-white dark:bg-neutral-900/12 dark:text-neutral-900"
+                    ? "bg-white/20 text-white"
                     : "bg-black/[0.06] text-neutral-700 dark:bg-white/[0.10] dark:text-neutral-200"
                 }`}
               >
@@ -651,7 +651,7 @@ export function UpdateFeedClient({
                       onClick={() => setAudienceFilter(id)}
                       className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                         active
-                          ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                          ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
                           : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                       }`}
                     >
@@ -762,7 +762,9 @@ export function UpdateFeedClient({
               onClick={() => setSelectedVendor("all")}
               className={`min-h-[32px] rounded-full px-3 py-1 text-xs font-medium transition ${
                 selectedVendor === "all"
-                  ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                  ? activeTrack === "official"
+                    ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
+                    : "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
                   : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
               }`}
             >
@@ -777,7 +779,9 @@ export function UpdateFeedClient({
                   key={vendor}
                   className={`inline-flex min-h-[32px] items-center rounded-full transition ${
                     isSelected
-                      ? "bg-neutral-900 text-white shadow-xs dark:bg-white dark:text-neutral-900"
+                      ? activeTrack === "official"
+                        ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
+                        : "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
                       : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
@@ -802,11 +806,9 @@ export function UpdateFeedClient({
                       <Star
                         className={`h-3 w-3 ${
                           isPinned
-                            ? isSelected
-                              ? "fill-amber-400 text-amber-400 dark:fill-amber-500 dark:text-amber-500"
-                              : "fill-amber-400 text-amber-400"
+                            ? "fill-amber-300 text-amber-300"
                             : isSelected
-                            ? "text-white/50 dark:text-neutral-900/40"
+                            ? "text-blue-200/75"
                             : "text-neutral-400 dark:text-neutral-500"
                         }`}
                       />
@@ -1023,7 +1025,7 @@ export function UpdateFeedClient({
               return (
                 <article
                   key={item.id}
-                  className="glass-card rounded-3xl p-4 transition hover:border-black/15 dark:hover:border-white/15 sm:p-5"
+                  className="glass-card-official rounded-3xl p-4 transition hover:border-blue-600/35 dark:hover:border-blue-400/35 sm:p-5"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1070,7 +1072,7 @@ export function UpdateFeedClient({
                   <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-neutral-700 dark:text-neutral-300 sm:text-sm">
                     {item.summary.map((line, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />
+                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-blue-600 dark:bg-blue-400" />
                         <span>{line}</span>
                       </li>
                     ))}
@@ -1106,7 +1108,7 @@ export function UpdateFeedClient({
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-white/[0.08]"
+                      className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-400/15"
                     >
                       <span>Read Source</span>
                       <ExternalLink className="h-3.5 w-3.5" />
