@@ -4,13 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  CheckCircle2,
   ExternalLink,
   Filter,
-  Loader2,
   Radar,
   Radio,
-  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -29,7 +26,6 @@ import type {
   RumorType,
   SourceConfig,
   SourceType,
-  SyncResult,
   SyncSourceReport,
   Track,
   UpdateItem,
@@ -182,12 +178,9 @@ export function UpdateFeedClient({
     "Cursor",
   ]);
 
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [toast, setToast] = useState<{ type: "ok" | "error"; message: string } | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  const isSyncingRef = useRef(false);
   const isPollingRef = useRef(false);
   const lastFetchedAtRef = useRef<number>(Date.now());
 
@@ -206,7 +199,7 @@ export function UpdateFeedClient({
   }, []);
 
   const refreshFromServer = useCallback(async () => {
-    if (isPollingRef.current || isSyncingRef.current) return;
+    if (isPollingRef.current) return;
     isPollingRef.current = true;
     try {
       const res = await fetch("/api/updates", { cache: "no-store" });
@@ -240,7 +233,7 @@ export function UpdateFeedClient({
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "visible" && !isSyncingRef.current) {
+      if (document.visibilityState === "visible") {
         void refreshFromServer();
       }
     }, POLL_INTERVAL_MS);
@@ -378,62 +371,6 @@ export function UpdateFeedClient({
     searchQuery,
   ]);
 
-  const handleSyncNow = async () => {
-    if (isSyncing) return;
-    isSyncingRef.current = true;
-    setIsSyncing(true);
-    setToast(null);
-    try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      const data = (await res.json()) as {
-        result?: SyncResult;
-        updates?: UpdateItem[];
-        syncLogs?: SyncSourceReport[];
-        lastSyncedAt?: string | null;
-        evaluator?: EvaluatorInfo;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Sync request failed.");
-      }
-      if (Array.isArray(data.updates)) setUpdates(data.updates);
-      if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
-      if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
-      if (data.evaluator) setEvaluator(data.evaluator);
-      const now = Date.now();
-      lastFetchedAtRef.current = now;
-      setNowMs(now);
-
-      const newCount = data.result?.totalNew ?? 0;
-      const fetchedCount = data.result?.totalFetched ?? 0;
-      const geminiCount = data.result?.rumorsEvaluatedCount ?? 0;
-      const mergedCount = data.result?.mergedDuplicatesCount ?? 0;
-      const extras = [
-        `${fetchedCount} checked`,
-        geminiCount > 0 ? `${geminiCount} rumors evaluated by Gemini` : "",
-        mergedCount > 0 ? `${mergedCount} duplicates merged` : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      setToast({
-        type: "ok",
-        message:
-          newCount > 0
-            ? `Synced ${newCount} new items (${extras}).`
-            : `Up to date (${extras}).`,
-      });
-    } catch (err) {
-      setToast({
-        type: "error",
-        message: err instanceof Error ? err.message : "An error occurred while syncing.",
-      });
-    } finally {
-      isSyncingRef.current = false;
-      setIsSyncing(false);
-    }
-  };
-
   const logBySourceId = useMemo(
     () => new Map(syncLogs.map((l) => [l.sourceId, l])),
     [syncLogs]
@@ -517,20 +454,6 @@ export function UpdateFeedClient({
             >
               <Radio className="h-3.5 w-3.5 text-emerald-600" />
               <span>Sources ({sources.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSyncNow}
-              disabled={isSyncing}
-              className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSyncing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>
             </button>
           </div>
         </div>
@@ -630,36 +553,6 @@ export function UpdateFeedClient({
           </div>
         </div>
       </header>
-
-      {/* Toast Feedback */}
-      {toast && (
-        <div className="mx-auto mt-3 max-w-4xl px-4">
-          <div
-            className={`flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-xs font-medium shadow-sm ${
-              toast.type === "ok"
-                ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-                : "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {toast.type === "ok" ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-              ) : (
-                <AlertCircle className="h-4 w-4 shrink-0" />
-              )}
-              <span>{toast.message}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="rounded p-1 hover:bg-black/5"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Sticky Filter Bar */}
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
@@ -863,20 +756,10 @@ export function UpdateFeedClient({
             </p>
             <p className="mt-1.5 text-xs text-slate-500">
               {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
-                ? "Click Sync Now in the header to fetch the latest updates from all configured sources."
+                ? "Updates are collected automatically every 30 minutes."
                 : "Reset filters or try a different search query."}
             </p>
-            {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0 ? (
-              <button
-                type="button"
-                onClick={handleSyncNow}
-                disabled={isSyncing}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                <span>Sync Now</span>
-              </button>
-            ) : (
+            {(activeTrack === "official" ? officialItems.length : rumorItems.length) > 0 && (
               <button
                 type="button"
                 onClick={resetActiveFilters}
