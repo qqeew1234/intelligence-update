@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -36,6 +36,9 @@ interface UpdateFeedClientProps {
 }
 
 const SUBSCRIPTIONS_KEY = "intelligence-update:pinned-vendors";
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
+const VISIBILITY_THROTTLE_MS = 30 * 1000;
+const CLOCK_TICK_MS = 30 * 1000;
 
 const CATEGORY_LABELS: Record<Category, string> = {
   new_model: "신규 모델",
@@ -69,11 +72,11 @@ const IMPORTANCE_STYLES: Record<Importance, { label: string; className: string }
   },
 };
 
-function formatRelativeTimeKo(iso: string | null): string {
+function formatRelativeTimeKo(iso: string | null, nowMs: number): string {
   if (!iso) return "동기화 기록 없음";
   const time = new Date(iso).getTime();
   if (Number.isNaN(time)) return "시간 불명";
-  const diffSec = Math.floor((Date.now() - time) / 1000);
+  const diffSec = Math.floor((nowMs - time) / 1000);
   if (diffSec < 60) return "방금 전";
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) return `${diffMin}분 전`;
@@ -110,6 +113,11 @@ export function UpdateFeedClient({
   const [isSyncing, setIsSyncing] = useState(false);
   const [toast, setToast] = useState<{ type: "ok" | "error"; message: string } | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  const isSyncingRef = useRef(false);
+  const isPollingRef = useRef(false);
+  const lastFetchedAtRef = useRef<number>(Date.now());
 
   useEffect(() => {
     try {
@@ -124,6 +132,60 @@ export function UpdateFeedClient({
       // ignore localStorage errors
     }
   }, []);
+
+  const refreshFromServer = useCallback(async () => {
+    if (isPollingRef.current || isSyncingRef.current) return;
+    isPollingRef.current = true;
+    try {
+      const res = await fetch("/api/updates", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        updates?: UpdateItem[];
+        syncLogs?: SyncSourceReport[];
+        lastSyncedAt?: string | null;
+      };
+      if (Array.isArray(data.updates)) setUpdates(data.updates);
+      if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
+      if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
+      const now = Date.now();
+      lastFetchedAtRef.current = now;
+      setNowMs(now);
+    } catch {
+      // ignore transient polling errors
+    } finally {
+      isPollingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, CLOCK_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible" && !isSyncingRef.current) {
+        void refreshFromServer();
+      }
+    }, POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastFetchedAtRef.current >= VISIBILITY_THROTTLE_MS
+      ) {
+        void refreshFromServer();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshFromServer]);
 
   const togglePinVendor = (vendor: string) => {
     setPinnedVendors((prev) => {
@@ -178,6 +240,7 @@ export function UpdateFeedClient({
 
   const handleSyncNow = async () => {
     if (isSyncing) return;
+    isSyncingRef.current = true;
     setIsSyncing(true);
     setToast(null);
     try {
@@ -195,6 +258,9 @@ export function UpdateFeedClient({
       if (Array.isArray(data.updates)) setUpdates(data.updates);
       if (Array.isArray(data.syncLogs)) setSyncLogs(data.syncLogs);
       if (data.lastSyncedAt !== undefined) setLastSyncedAt(data.lastSyncedAt);
+      const now = Date.now();
+      lastFetchedAtRef.current = now;
+      setNowMs(now);
 
       const newCount = data.result?.totalNew ?? 0;
       const fetchedCount = data.result?.totalFetched ?? 0;
@@ -211,6 +277,7 @@ export function UpdateFeedClient({
         message: err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.",
       });
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
     }
   };
@@ -286,12 +353,24 @@ export function UpdateFeedClient({
         {/* Meta Bar */}
         <div className="border-t border-slate-100 bg-slate-50/70">
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs text-slate-500">
-            <span>
-              마지막 확인:{" "}
-              <strong className="font-medium text-slate-700">
-                {formatRelativeTimeKo(lastSyncedAt)}
-              </strong>
-            </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                마지막 확인:{" "}
+                <strong
+                  suppressHydrationWarning
+                  title={
+                    lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("ko-KR") : undefined
+                  }
+                  className="font-medium text-slate-700"
+                >
+                  {formatRelativeTimeKo(lastSyncedAt, nowMs)}
+                </strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>매시 정각 자동 수집 · 5분마다 화면 갱신</span>
+              </span>
+            </div>
             <span>
               표시 중{" "}
               <strong className="font-semibold text-slate-800">{filteredUpdates.length}</strong>건 /
@@ -526,9 +605,10 @@ export function UpdateFeedClient({
                     <time
                       dateTime={item.publishedAt}
                       title={new Date(item.publishedAt).toLocaleString("ko-KR")}
+                      suppressHydrationWarning
                       className="text-xs text-slate-400"
                     >
-                      {formatRelativeTimeKo(item.publishedAt)}
+                      {formatRelativeTimeKo(item.publishedAt, nowMs)}
                     </time>
                   </div>
 

@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     updates: filtered,
     lastSyncedAt: store.lastSyncedAt,
+    syncLogs: store.syncLogs,
     total: filtered.length,
     vendors,
     sources: SOURCES,
