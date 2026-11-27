@@ -56,6 +56,7 @@ const THEME_KEY = "intelligence-update:theme";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const VISIBILITY_THROTTLE_MS = 30 * 1000;
 const CLOCK_TICK_MS = 30 * 1000;
+const PAGE_SIZE = 20;
 
 const CATEGORY_LABELS: Record<Category, string> = {
   new_model: "New Model",
@@ -199,9 +200,11 @@ export function UpdateFeedClient({
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>("system");
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const isPollingRef = useRef(false);
   const lastFetchedAtRef = useRef<number>(Date.now());
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -425,6 +428,44 @@ export function UpdateFeedClient({
     selectedRumorVendor,
     searchQuery,
   ]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [
+    activeTrack,
+    audienceFilter,
+    majorOnly,
+    subscribedOnly,
+    selectedOfficialVendor,
+    credibilityFilter,
+    rumorTypeFilter,
+    selectedRumorVendor,
+    searchQuery,
+  ]);
+
+  const visibleUpdates = useMemo(
+    () => filteredUpdates.slice(0, visibleCount),
+    [filteredUpdates, visibleCount]
+  );
+  const hasMore = visibleUpdates.length < filteredUpdates.length;
+
+  useEffect(() => {
+    if (!hasMore) return undefined;
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredUpdates.length));
+        }
+      },
+      { rootMargin: "320px 0px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, visibleCount, filteredUpdates.length]);
 
   const logBySourceId = useMemo(
     () => new Map(syncLogs.map((l) => [l.sourceId, l])),
@@ -870,7 +911,7 @@ export function UpdateFeedClient({
           </div>
         ) : (
           <div className="flex flex-col gap-3.5">
-            {filteredUpdates.map((item) => {
+            {visibleUpdates.map((item) => {
               if (item.track === "rumor" && item.rumor) {
                 const credStyle = CREDIBILITY_STYLES[item.rumor.credibility];
                 const CredIcon = credStyle.icon;
@@ -1125,6 +1166,27 @@ export function UpdateFeedClient({
                 </article>
               );
             })}
+
+            {hasMore && (
+              <div
+                ref={loadMoreRef}
+                key={`${activeTrack}-${visibleUpdates.length}-${filteredUpdates.length}`}
+                className="flex justify-center pt-2"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredUpdates.length))
+                  }
+                  className="glass-card inline-flex min-h-[38px] items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-neutral-600 transition hover:bg-white/90 dark:text-neutral-300 dark:hover:bg-white/[0.12]"
+                >
+                  <span>Loading more updates</span>
+                  <span translate="no" className="text-neutral-400 dark:text-neutral-500">
+                    ({visibleUpdates.length}/{filteredUpdates.length})
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
