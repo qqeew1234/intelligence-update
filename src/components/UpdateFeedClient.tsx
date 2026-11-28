@@ -664,10 +664,10 @@ export function UpdateFeedClient({
             <button
               type="button"
               onClick={() => setActiveTrack("official")}
-              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 ${
                 activeTrack === "official"
-                  ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
-                  : "bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/20 hover:bg-blue-500/15 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-400/25 dark:hover:bg-blue-500/20"
+                  ? "bg-blue-600/18 text-blue-900 ring-1 ring-blue-600/35 shadow-xs dark:bg-blue-500/26 dark:text-blue-100 dark:ring-blue-400/45"
+                  : "bg-blue-500/[0.06] text-blue-800/75 ring-1 ring-blue-500/15 hover:bg-blue-500/12 dark:bg-blue-500/[0.08] dark:text-blue-200/75 dark:ring-blue-400/18 dark:hover:bg-blue-500/14"
               }`}
             >
               <ShieldCheck className="h-4 w-4" />
@@ -676,8 +676,8 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "official"
-                    ? "bg-white/20 text-white"
-                    : "bg-blue-600/12 text-blue-800 dark:bg-blue-400/20 dark:text-blue-100"
+                    ? "bg-blue-600/15 text-blue-900 dark:bg-blue-300/20 dark:text-blue-50"
+                    : "bg-blue-600/10 text-blue-800/80 dark:bg-blue-400/15 dark:text-blue-200/80"
                 }`}
               >
                 {officialItems.length}
@@ -687,10 +687,10 @@ export function UpdateFeedClient({
             <button
               type="button"
               onClick={() => setActiveTrack("rumor")}
-              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[40px] items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
                 activeTrack === "rumor"
-                  ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
-                  : "bg-amber-500/10 text-amber-800 ring-1 ring-amber-500/25 hover:bg-amber-500/15 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-400/25 dark:hover:bg-amber-500/20"
+                  ? "bg-amber-500/20 text-amber-950 ring-1 ring-amber-600/35 shadow-xs dark:bg-amber-500/24 dark:text-amber-100 dark:ring-amber-400/45"
+                  : "bg-amber-500/[0.07] text-amber-900/75 ring-1 ring-amber-500/18 hover:bg-amber-500/12 dark:bg-amber-500/[0.08] dark:text-amber-200/75 dark:ring-amber-400/18 dark:hover:bg-amber-500/14"
               }`}
             >
               <Radar className="h-4 w-4" />
@@ -699,8 +699,8 @@ export function UpdateFeedClient({
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
                   activeTrack === "rumor"
-                    ? "bg-white/20 text-white dark:bg-neutral-950/15 dark:text-neutral-950"
-                    : "bg-amber-600/12 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100"
+                    ? "bg-amber-600/15 text-amber-950 dark:bg-amber-300/20 dark:text-amber-50"
+                    : "bg-amber-600/10 text-amber-900/80 dark:bg-amber-400/15 dark:text-amber-200/80"
                 }`}
               >
                 {rumorItems.length}
@@ -725,9 +725,9 @@ export function UpdateFeedClient({
                       key={id}
                       type="button"
                       onClick={() => setAudienceFilter(id)}
-                      className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 ${
                         active
-                          ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
+                          ? "bg-blue-600/16 text-blue-900 ring-1 ring-blue-600/35 shadow-xs dark:bg-blue-500/24 dark:text-blue-100 dark:ring-blue-400/45"
                           : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                       }`}
                     >
@@ -740,9 +740,9 @@ export function UpdateFeedClient({
                 <button
                   type="button"
                   onClick={() => setMajorOnly((v) => !v)}
-                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50 ${
                     majorOnly
-                      ? "bg-rose-600 text-white shadow-xs"
+                      ? "bg-rose-500/16 text-rose-800 ring-1 ring-rose-500/35 shadow-xs dark:bg-rose-500/22 dark:text-rose-200 dark:ring-rose-400/45"
                       : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
@@ -752,15 +752,17 @@ export function UpdateFeedClient({
                 <button
                   type="button"
                   onClick={() => setSubscribedOnly((v) => !v)}
-                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-[38px] items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
                     subscribedOnly
-                      ? "bg-amber-500 text-white shadow-xs dark:text-neutral-950"
+                      ? "bg-amber-500/18 text-amber-950 ring-1 ring-amber-600/35 shadow-xs dark:bg-amber-500/22 dark:text-amber-100 dark:ring-amber-400/45"
                       : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
                   <Star
                     className={`h-3.5 w-3.5 ${
-                      subscribedOnly ? "fill-white dark:fill-neutral-950" : ""
+                      subscribedOnly
+                        ? "fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400"
+                        : ""
                     }`}
                   />
                   <span>Pinned ({pinnedVendors.length})</span>
@@ -780,9 +782,9 @@ export function UpdateFeedClient({
                     key={id}
                     type="button"
                     onClick={() => setCredibilityFilter(id)}
-                    className={`inline-flex min-h-[38px] items-center rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex min-h-[38px] items-center rounded-xl px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
                       credibilityFilter === id
-                        ? "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
+                        ? "bg-amber-500/18 text-amber-950 ring-1 ring-amber-600/35 shadow-xs dark:bg-amber-500/22 dark:text-amber-100 dark:ring-amber-400/45"
                         : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                     }`}
                   >
@@ -840,11 +842,15 @@ export function UpdateFeedClient({
             <button
               type="button"
               onClick={() => setSelectedVendor("all")}
-              className={`min-h-[32px] rounded-full px-3 py-1 text-xs font-medium transition ${
+              className={`min-h-[32px] rounded-full px-3 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 ${
+                activeTrack === "official"
+                  ? "focus-visible:ring-blue-400/50"
+                  : "focus-visible:ring-amber-400/50"
+              } ${
                 selectedVendor === "all"
                   ? activeTrack === "official"
-                    ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
-                    : "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
+                    ? "bg-blue-600/16 text-blue-900 ring-1 ring-blue-600/35 shadow-xs dark:bg-blue-500/24 dark:text-blue-100 dark:ring-blue-400/45"
+                    : "bg-amber-500/18 text-amber-950 ring-1 ring-amber-600/35 shadow-xs dark:bg-amber-500/22 dark:text-amber-100 dark:ring-amber-400/45"
                   : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
               }`}
             >
@@ -860,8 +866,8 @@ export function UpdateFeedClient({
                   className={`inline-flex min-h-[32px] items-center rounded-full transition ${
                     isSelected
                       ? activeTrack === "official"
-                        ? "bg-blue-700 text-white shadow-xs dark:bg-blue-600 dark:text-white"
-                        : "bg-amber-600 text-white shadow-xs dark:bg-amber-500 dark:text-neutral-950"
+                        ? "bg-blue-600/16 text-blue-900 ring-1 ring-blue-600/35 shadow-xs dark:bg-blue-500/24 dark:text-blue-100 dark:ring-blue-400/45"
+                        : "bg-amber-500/18 text-amber-950 ring-1 ring-amber-600/35 shadow-xs dark:bg-amber-500/22 dark:text-amber-100 dark:ring-amber-400/45"
                       : "bg-black/[0.04] text-neutral-700 ring-1 ring-black/[0.07] hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.09] dark:hover:bg-white/[0.11]"
                   }`}
                 >
@@ -869,8 +875,10 @@ export function UpdateFeedClient({
                     type="button"
                     translate="no"
                     onClick={() => setSelectedVendor(isSelected ? "all" : vendor)}
-                    className={`py-1 pl-3 text-xs font-medium ${
-                      activeTrack === "official" ? "pr-1.5" : "pr-3"
+                    className={`rounded-l-full py-1 pl-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 ${
+                      activeTrack === "official"
+                        ? "pr-1.5 focus-visible:ring-blue-400/50"
+                        : "rounded-r-full pr-3 focus-visible:ring-amber-400/50"
                     }`}
                   >
                     {vendor}
@@ -881,14 +889,14 @@ export function UpdateFeedClient({
                       onClick={() => togglePinVendor(vendor)}
                       title={isPinned ? `Unpin ${vendor}` : `Pin ${vendor}`}
                       aria-label={`Toggle ${vendor} subscription`}
-                      className="rounded-r-full py-1 pl-1 pr-2.5 hover:opacity-80"
+                      className="rounded-r-full py-1 pl-1 pr-2.5 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
                     >
                       <Star
                         className={`h-3 w-3 ${
                           isPinned
-                            ? "fill-amber-300 text-amber-300"
+                            ? "fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400"
                             : isSelected
-                            ? "text-blue-200/75"
+                            ? "text-blue-600/50 dark:text-blue-300/60"
                             : "text-neutral-400 dark:text-neutral-500"
                         }`}
                       />
