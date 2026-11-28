@@ -76,7 +76,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   gpu_accelerator: "GPU & Accelerators",
   cpu_silicon: "CPU & Silicon",
   memory_foundry: "Memory & Foundry",
-  local_ai_hw: "Local AI Hardware",
+  local_ai_hw: "Local AI Compute",
   driver_runtime: "Drivers & Runtimes",
   benchmark: "Benchmarks",
 };
@@ -271,7 +271,8 @@ export function UpdateFeedClient({
     if (isPollingRef.current) return;
     isPollingRef.current = true;
     try {
-      const res = await fetch(`/api/updates?domain=${domain}`, { cache: "no-store" });
+      const apiDomain = domain === "hardware" ? "compute" : "ai";
+      const res = await fetch(`/api/updates?domain=${apiDomain}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as {
         updates?: UpdateItem[];
@@ -547,7 +548,7 @@ export function UpdateFeedClient({
                 className="glass-inset inline-flex items-center rounded-xl p-1"
               >
                 <Link
-                  href="/"
+                  href="/ai"
                   translate="no"
                   aria-current={domain === "ai" ? "page" : undefined}
                   className={`inline-flex min-h-[30px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
@@ -560,7 +561,7 @@ export function UpdateFeedClient({
                   <span>AI</span>
                 </Link>
                 <Link
-                  href="/hardware"
+                  href="/compute"
                   translate="no"
                   aria-current={domain === "hardware" ? "page" : undefined}
                   className={`inline-flex min-h-[30px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
@@ -570,7 +571,7 @@ export function UpdateFeedClient({
                   }`}
                 >
                   <Cpu className="h-3.5 w-3.5" />
-                  <span>Hardware</span>
+                  <span>Compute</span>
                 </Link>
               </nav>
             </div>

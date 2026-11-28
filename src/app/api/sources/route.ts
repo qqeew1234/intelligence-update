@@ -7,8 +7,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const rawDomain = request.nextUrl.searchParams.get("domain");
   const domain: Domain =
-    request.nextUrl.searchParams.get("domain") === "hardware" ? "hardware" : "ai";
+    rawDomain === "hardware" || rawDomain === "compute" ? "hardware" : "ai";
   const store = await readStore(domain);
   const logMap = new Map(store.syncLogs.map((log) => [log.sourceId, log]));
   const domainSources = getSourcesByDomain(domain);

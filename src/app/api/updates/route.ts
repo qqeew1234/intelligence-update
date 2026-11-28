@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const domain: Domain = searchParams.get("domain") === "hardware" ? "hardware" : "ai";
+  const rawDomain = searchParams.get("domain");
+  const domain: Domain =
+    rawDomain === "hardware" || rawDomain === "compute" ? "hardware" : "ai";
   const track = searchParams.get("track");
   const audience = searchParams.get("audience");
   const importance = searchParams.get("importance");
