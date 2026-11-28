@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  Cpu,
   ExternalLink,
   Filter,
   Monitor,
@@ -25,6 +27,7 @@ import type {
   Audience,
   Category,
   CredibilityLevel,
+  Domain,
   EvidenceBasis,
   Importance,
   RumorType,
@@ -41,6 +44,7 @@ interface EvaluatorInfo {
 }
 
 interface UpdateFeedClientProps {
+  domain?: Domain;
   initialUpdates: UpdateItem[];
   initialLastSyncedAt: string | null;
   initialSyncLogs: SyncSourceReport[];
@@ -51,7 +55,10 @@ interface UpdateFeedClientProps {
 
 type ThemePreference = "system" | "light" | "dark";
 
-const SUBSCRIPTIONS_KEY = "intelligence-update:pinned-vendors";
+const SUBSCRIPTIONS_KEY_AI = "intelligence-update:pinned-vendors";
+const SUBSCRIPTIONS_KEY_HARDWARE = "intelligence-update:pinned-vendors:hardware";
+const DEFAULT_PINNED_AI = ["OpenAI", "Anthropic", "Google", "Cursor"];
+const DEFAULT_PINNED_HARDWARE = ["NVIDIA", "AMD", "Apple", "Intel"];
 const THEME_KEY = "intelligence-update:theme";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const VISIBILITY_THROTTLE_MS = 30 * 1000;
@@ -66,6 +73,12 @@ const CATEGORY_LABELS: Record<Category, string> = {
   coding_tool: "Coding Tool / SDK",
   bugfix: "Bug Fix",
   research: "Research",
+  gpu_accelerator: "GPU & Accelerators",
+  cpu_silicon: "CPU & Silicon",
+  memory_foundry: "Memory & Foundry",
+  local_ai_hw: "Local AI Hardware",
+  driver_runtime: "Drivers & Runtimes",
+  benchmark: "Benchmarks",
 };
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
@@ -160,6 +173,7 @@ function formatRelativeTime(iso: string | null, nowMs: number): string {
 }
 
 export function UpdateFeedClient({
+  domain = "ai",
   initialUpdates,
   initialLastSyncedAt,
   initialSyncLogs,
@@ -167,6 +181,10 @@ export function UpdateFeedClient({
   evaluator: initialEvaluator,
   initialBuildId,
 }: UpdateFeedClientProps) {
+  const subscriptionsKey =
+    domain === "hardware" ? SUBSCRIPTIONS_KEY_HARDWARE : SUBSCRIPTIONS_KEY_AI;
+  const defaultPinned =
+    domain === "hardware" ? DEFAULT_PINNED_HARDWARE : DEFAULT_PINNED_AI;
   const [updates, setUpdates] = useState<UpdateItem[]>(initialUpdates);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(initialLastSyncedAt);
   const [syncLogs, setSyncLogs] = useState<SyncSourceReport[]>(initialSyncLogs);
@@ -190,12 +208,7 @@ export function UpdateFeedClient({
   const [selectedRumorVendor, setSelectedRumorVendor] = useState<string>("all");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [pinnedVendors, setPinnedVendors] = useState<string[]>([
-    "OpenAI",
-    "Anthropic",
-    "Google",
-    "Cursor",
-  ]);
+  const [pinnedVendors, setPinnedVendors] = useState<string[]>(defaultPinned);
 
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>("system");
@@ -212,17 +225,19 @@ export function UpdateFeedClient({
       if (savedTheme === "system" || savedTheme === "light" || savedTheme === "dark") {
         setTheme(savedTheme);
       }
-      const saved = window.localStorage.getItem(SUBSCRIPTIONS_KEY);
+      const saved = window.localStorage.getItem(subscriptionsKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setPinnedVendors(parsed.filter((v): v is string => typeof v === "string"));
+          return;
         }
       }
+      setPinnedVendors(defaultPinned);
     } catch {
       // ignore localStorage errors
     }
-  }, []);
+  }, [subscriptionsKey, defaultPinned]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -256,7 +271,7 @@ export function UpdateFeedClient({
     if (isPollingRef.current) return;
     isPollingRef.current = true;
     try {
-      const res = await fetch("/api/updates", { cache: "no-store" });
+      const res = await fetch(`/api/updates?domain=${domain}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as {
         updates?: UpdateItem[];
@@ -280,7 +295,7 @@ export function UpdateFeedClient({
     } finally {
       isPollingRef.current = false;
     }
-  }, [initialBuildId]);
+  }, [domain, initialBuildId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -318,7 +333,7 @@ export function UpdateFeedClient({
         ? prev.filter((v) => v !== vendor)
         : [...prev, vendor];
       try {
-        window.localStorage.setItem(SUBSCRIPTIONS_KEY, JSON.stringify(next));
+        window.localStorage.setItem(subscriptionsKey, JSON.stringify(next));
       } catch {
         // ignore localStorage errors
       }
@@ -527,6 +542,37 @@ export function UpdateFeedClient({
               >
                 Intelligence Update
               </h1>
+              <nav
+                aria-label="Feed domain"
+                className="glass-inset inline-flex items-center rounded-xl p-1"
+              >
+                <Link
+                  href="/"
+                  translate="no"
+                  aria-current={domain === "ai" ? "page" : undefined}
+                  className={`inline-flex min-h-[30px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    domain === "ai"
+                      ? "bg-white text-neutral-900 shadow-xs dark:bg-white/[0.14] dark:text-white"
+                      : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>AI</span>
+                </Link>
+                <Link
+                  href="/hardware"
+                  translate="no"
+                  aria-current={domain === "hardware" ? "page" : undefined}
+                  className={`inline-flex min-h-[30px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    domain === "hardware"
+                      ? "bg-white text-neutral-900 shadow-xs dark:bg-white/[0.14] dark:text-white"
+                      : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                  }`}
+                >
+                  <Cpu className="h-3.5 w-3.5" />
+                  <span>Hardware</span>
+                </Link>
+              </nav>
             </div>
           </div>
 
@@ -784,7 +830,11 @@ export function UpdateFeedClient({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
-                  activeTrack === "official"
+                  domain === "hardware"
+                    ? activeTrack === "official"
+                      ? "Search GPUs, chips, CUDA, ROCm, MLX..."
+                      : "Search silicon leaks, HBM, benchmarks..."
+                    : activeTrack === "official"
                     ? "Search models, features, SDKs..."
                     : "Search rumors, claims, evidence..."
                 }
@@ -866,8 +916,10 @@ export function UpdateFeedClient({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="space-y-1">
               <p>
-                <strong>How Rumor Radar Works:</strong> Collects unconfirmed leaks, press
-                scoops, early papers, and community threads across{" "}
+                <strong>How Rumor Radar Works:</strong>{" "}
+                {domain === "hardware"
+                  ? "Collects silicon/GPU leaks, foundry & HBM supply-chain reports, architecture deep dives, and community threads across "
+                  : "Collects unconfirmed leaks, press scoops, early papers, and community threads across "}
                 <span translate="no">{rumorSources.length}</span> sources every hour.
               </p>
               <p className="text-amber-900/85 dark:text-amber-200/85">

@@ -1,3 +1,5 @@
+export type Domain = "ai" | "hardware";
+
 export type Track = "official" | "rumor";
 
 export type Importance = "major" | "minor" | "patch";
@@ -11,7 +13,13 @@ export type Category =
   | "deprecation"
   | "coding_tool"
   | "bugfix"
-  | "research";
+  | "research"
+  | "gpu_accelerator"
+  | "cpu_silicon"
+  | "memory_foundry"
+  | "local_ai_hw"
+  | "driver_runtime"
+  | "benchmark";
 
 export type SourceType =
   | "rss"
@@ -63,11 +71,13 @@ export interface SourceConfig {
   vendor: string;
   url: string;
   type: SourceType;
+  domain?: Domain;
   track: Track;
   defaultAudiences: Audience[];
   defaultCategory: Category;
   enabled: boolean;
   aiFilter?: boolean;
+  topicFilter?: "ai" | "hardware";
 }
 
 export interface RawCandidate {
@@ -81,6 +91,7 @@ export interface RawCandidate {
 
 export interface UpdateItem {
   id: string;
+  domain?: Domain;
   track: Track;
   sourceId: string;
   sourceName: string;
@@ -114,6 +125,7 @@ export interface SyncSourceReport {
   sourceName: string;
   vendor: string;
   type: SourceType;
+  domain?: Domain;
   track: Track;
   status: "ok" | "error";
   fetchedCount: number;

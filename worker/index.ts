@@ -1,5 +1,13 @@
 import handler from "vinext/server/fetch-handler";
 import { runSync } from "../src/lib/sync";
+import type { Domain, Track } from "../src/lib/types";
+
+function getScheduledTarget(utcMinutes: number): { domain: Domain; track: Track } {
+  if (utcMinutes >= 45) return { domain: "hardware", track: "rumor" };
+  if (utcMinutes >= 30) return { domain: "ai", track: "rumor" };
+  if (utcMinutes >= 15) return { domain: "hardware", track: "official" };
+  return { domain: "ai", track: "official" };
+}
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -12,10 +20,10 @@ export default {
     ctx: ExecutionContext
   ): Promise<void> {
     const utcMinutes = new Date(controller.scheduledTime).getUTCMinutes();
-    const track = utcMinutes >= 15 && utcMinutes < 45 ? "rumor" : "official";
+    const { domain, track } = getScheduledTarget(utcMinutes);
     ctx.waitUntil(
-      runSync({ track }).catch((err) => {
-        console.error(`[scheduled sync:${track}] failed:`, err);
+      runSync({ domain, track }).catch((err) => {
+        console.error(`[scheduled sync:${domain}:${track}] failed:`, err);
       })
     );
   },

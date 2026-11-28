@@ -1,7 +1,13 @@
 import { getCloudflareEnv } from "./env";
-import type { StoreData } from "./types";
+import type { Domain, StoreData } from "./types";
 
-const KV_STORE_KEY = "store:v2";
+function getKvStoreKey(domain: Domain): string {
+  return domain === "hardware" ? "store:hw:v2" : "store:v2";
+}
+
+function getLocalStoreFilename(domain: Domain): string {
+  return domain === "hardware" ? "store-hardware.json" : "store.json";
+}
 
 interface KvNamespaceLike {
   get(key: string, type: "json"): Promise<unknown>;
@@ -37,10 +43,10 @@ async function getKvBinding(): Promise<KvNamespaceLike | null> {
   return null;
 }
 
-export async function readStore(): Promise<StoreData> {
+export async function readStore(domain: Domain = "ai"): Promise<StoreData> {
   const kv = await getKvBinding();
   if (kv) {
-    const parsed = (await kv.get(KV_STORE_KEY, "json")) as Partial<StoreData> | null;
+    const parsed = (await kv.get(getKvStoreKey(domain), "json")) as Partial<StoreData> | null;
     return normalizeStore(parsed);
   }
 
@@ -48,7 +54,7 @@ export async function readStore(): Promise<StoreData> {
     import("node:fs/promises"),
     import("node:path"),
   ]);
-  const storePath = path.join(process.cwd(), "data", "store.json");
+  const storePath = path.join(process.cwd(), "data", getLocalStoreFilename(domain));
   try {
     const raw = await readFile(storePath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<StoreData>;
@@ -62,10 +68,10 @@ export async function readStore(): Promise<StoreData> {
   }
 }
 
-export async function writeStore(data: StoreData): Promise<void> {
+export async function writeStore(data: StoreData, domain: Domain = "ai"): Promise<void> {
   const kv = await getKvBinding();
   if (kv) {
-    await kv.put(KV_STORE_KEY, JSON.stringify(data));
+    await kv.put(getKvStoreKey(domain), JSON.stringify(data));
     return;
   }
 
@@ -74,7 +80,7 @@ export async function writeStore(data: StoreData): Promise<void> {
     import("node:path"),
   ]);
   const dataDir = path.join(process.cwd(), "data");
-  const storePath = path.join(dataDir, "store.json");
+  const storePath = path.join(dataDir, getLocalStoreFilename(domain));
   await mkdir(dataDir, { recursive: true });
   const tempPath = `${storePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tempPath, JSON.stringify(data, null, 2), "utf-8");

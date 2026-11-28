@@ -11,6 +11,9 @@ const REQUEST_HEADERS = {
 const AI_TOPIC_REGEX =
   /\b(ai|llm|openai|gpt-?\d|chatgpt|anthropic|claude|gemini|deepmind|deepseek|xai|grok|cursor|mistral|llama|qwen|ollama|nvidia|hugging\s*face|diffusion|agentic|mcp|inference|transformer)\b/i;
 
+const HARDWARE_TOPIC_REGEX =
+  /\b(gpu|vram|blackwell|rubin|hopper|b200|gb200|b300|rtx|radeon|instinct|mi3\d\d|mi4\d\d|cuda|rocm|epyc|ryzen|xeon|apple\s*silicon|m[3-9]\s*(pro|max|ultra)?|mac\s*(studio|mini|pro|book)|unified\s*memory|mlx|npu|tpu|trainium|asic|hbm\d*|gddr\d*|tsmc|2nm|3nm|cowos|wafer|foundry|pcie|nvlink|infiniband|tensorrt|openvino|sglang|quantiz\w*|workstation|dgx|chip|silicon|semiconductor|fp4|fp8)\b/i;
+
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -141,8 +144,11 @@ async function collectRssOrAtom(
     throw new Error("Unrecognized RSS/Atom XML root");
   }
 
-  const filteredItems = source.aiFilter
-    ? rawItems.filter((item) => AI_TOPIC_REGEX.test(`${item.title}\n${item.rawText}`))
+  const topic = source.topicFilter ?? (source.aiFilter ? "ai" : undefined);
+  const topicRegex =
+    topic === "hardware" ? HARDWARE_TOPIC_REGEX : topic === "ai" ? AI_TOPIC_REGEX : null;
+  const filteredItems = topicRegex
+    ? rawItems.filter((item) => topicRegex.test(`${item.title}\n${item.rawText}`))
     : rawItems;
 
   filteredItems.sort(
@@ -363,11 +369,14 @@ async function collectHnAlgolia(
   const json = JSON.parse(text) as { hits?: HnHit[] };
   const hits = Array.isArray(json.hits) ? json.hits : [];
 
+  const hnTopicRegex =
+    source.topicFilter === "hardware" ? HARDWARE_TOPIC_REGEX : AI_TOPIC_REGEX;
+
   const aiHits = hits.filter((hit) => {
     const title = compactWhitespace(hit.title ?? "");
     if (!title) return false;
     const body = stripHtml(hit.story_text ?? "");
-    return AI_TOPIC_REGEX.test(`${title}\n${body}`);
+    return hnTopicRegex.test(`${title}\n${body}`);
   });
 
   const candidates: RawCandidate[] = aiHits.slice(0, limit).map((hit) => {

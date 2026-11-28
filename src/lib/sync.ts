@@ -1,5 +1,5 @@
 import { collectFromSource } from "./collectors";
-import { SOURCES } from "./sources";
+import { getSourcesByDomain } from "./sources";
 import { readStore, writeStore } from "./storage";
 import {
   buildOfficialItem,
@@ -10,6 +10,7 @@ import {
 import { canonicalizeUrl } from "./text";
 import type {
   CorroboratingSource,
+  Domain,
   RawCandidate,
   RumorEvaluation,
   SourceConfig,
@@ -20,6 +21,7 @@ import type {
 } from "./types";
 
 export interface RunSyncOptions {
+  domain?: Domain;
   track?: Track | "all";
   limitPerSource?: number;
   officialLimit?: number;
@@ -107,6 +109,7 @@ function buildRecentRumorContext(
 
 export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult> {
   const {
+    domain = "ai",
     track = "all",
     limitPerSource,
     officialLimit = 5,
@@ -115,8 +118,9 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
     useGemini = true,
   } = options;
 
-  const store = await readStore();
+  const store = await readStore(domain);
   const syncedAt = new Date().toISOString();
+  const domainSources = getSourcesByDomain(domain);
 
   const existingById = new Map<string, UpdateItem>(store.updates.map((u) => [u.id, u]));
   const existingRumorByUrl = new Map<string, UpdateItem>();
@@ -134,7 +138,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
     }
   }
 
-  const targetSources = SOURCES.filter(
+  const targetSources = domainSources.filter(
     (s) => s.enabled && (track === "all" || s.track === track)
   );
 
@@ -218,6 +222,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
         sourceName: source.name,
         vendor: source.vendor,
         type: source.type,
+        domain,
         track: source.track,
         status: "ok",
         fetchedCount: output.fetchedCount,
@@ -242,6 +247,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
         sourceName: source.name,
         vendor: source.vendor,
         type: source.type,
+        domain,
         track: source.track,
         status: "error",
         fetchedCount: 0,
@@ -278,9 +284,10 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
   const primaryEval = await evaluateRumorBatch(
     geminiBudgetItems,
     canUseGemini,
-    recentRumorsContext
+    recentRumorsContext,
+    domain
   );
-  const overflowEval = await evaluateRumorBatch(overflowRumorItems, false);
+  const overflowEval = await evaluateRumorBatch(overflowRumorItems, false, [], domain);
 
   for (const item of [...primaryEval.items, ...overflowEval.items]) {
     existingById.set(item.id, item);
@@ -313,7 +320,7 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
   // If Gemini is enabled and budget remains, upgrade up to 12 older rule-evaluated rumors.
   const remainingBudget = Math.max(0, maxGeminiRumors - geminiBudgetItems.length);
   if (canUseGemini && remainingBudget > 0 && (track === "all" || track === "rumor")) {
-    const sourceMap = new Map(SOURCES.map((s) => [s.id, s]));
+    const sourceMap = new Map(domainSources.map((s) => [s.id, s]));
     const upgradeLimit = Math.min(MAX_UPGRADE_RUMORS_PER_SYNC, remainingBudget);
     const toUpgrade = Array.from(existingById.values())
       .filter((u) => u.track === "rumor" && u.evaluatedBy === "rule")
@@ -352,7 +359,8 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
         const upgraded = await evaluateRumorBatch(
           upgradeEntries,
           true,
-          contextExcludingUpgrades
+          contextExcludingUpgrades,
+          domain
         );
 
         for (const item of upgraded.items) {
@@ -402,11 +410,11 @@ export async function runSync(options: RunSyncOptions = {}): Promise<SyncResult>
   store.updates = [...officialUpdates, ...rumorUpdates].sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
-  store.syncLogs = SOURCES.map((s) => reportBySourceId.get(s.id)).filter(
+  store.syncLogs = domainSources.map((s) => reportBySourceId.get(s.id)).filter(
     (r): r is SyncSourceReport => Boolean(r)
   );
 
-  await writeStore(store);
+  await writeStore(store, domain);
 
   const totalFetched = currentReports.reduce((acc, r) => acc + r.fetchedCount, 0);
   return {

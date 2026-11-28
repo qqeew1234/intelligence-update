@@ -6,6 +6,7 @@ import type {
   Category,
   CorroboratingSource,
   CredibilityLevel,
+  Domain,
   EvidenceBasis,
   Importance,
   RawCandidate,
@@ -53,87 +54,102 @@ interface GeminiRumorItemResult {
   caveat?: string;
 }
 
-const RUMOR_BATCH_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    items: {
-      type: "array",
+function buildRumorBatchSchema(categories: Category[]) {
+  return {
+    type: "object",
+    properties: {
       items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          is_relevant: { type: "boolean" },
-          duplicateOfId: { type: "string" },
-          vendor: { type: "string" },
-          headline: { type: "string" },
-          summary: { type: "array", items: { type: "string" } },
-          importance: { type: "string", enum: ["major", "minor", "patch"] },
-          audiences: {
-            type: "array",
-            items: { type: "string", enum: ["developer", "general"] },
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            is_relevant: { type: "boolean" },
+            duplicateOfId: { type: "string" },
+            vendor: { type: "string" },
+            headline: { type: "string" },
+            summary: { type: "array", items: { type: "string" } },
+            importance: { type: "string", enum: ["major", "minor", "patch"] },
+            audiences: {
+              type: "array",
+              items: { type: "string", enum: ["developer", "general"] },
+            },
+            category: {
+              type: "string",
+              enum: categories,
+            },
+            rumorType: {
+              type: "string",
+              enum: ["unreleased_leak", "insider_report", "community_buzz", "early_research"],
+            },
+            credibility: {
+              type: "string",
+              enum: ["high", "medium", "low", "unverified"],
+            },
+            credibilityScore: { type: "integer" },
+            evidenceBasis: {
+              type: "string",
+              enum: [
+                "code_or_ui_artifact",
+                "multiple_reports",
+                "named_insider",
+                "single_source",
+                "speculation",
+              ],
+            },
+            claim: { type: "string" },
+            impact: { type: "string" },
+            evidenceSummary: { type: "string" },
+            caveat: { type: "string" },
           },
-          category: {
-            type: "string",
-            enum: [
-              "new_model",
-              "new_feature",
-              "pricing",
-              "deprecation",
-              "coding_tool",
-              "bugfix",
-              "research",
-            ],
-          },
-          rumorType: {
-            type: "string",
-            enum: ["unreleased_leak", "insider_report", "community_buzz", "early_research"],
-          },
-          credibility: {
-            type: "string",
-            enum: ["high", "medium", "low", "unverified"],
-          },
-          credibilityScore: { type: "integer" },
-          evidenceBasis: {
-            type: "string",
-            enum: [
-              "code_or_ui_artifact",
-              "multiple_reports",
-              "named_insider",
-              "single_source",
-              "speculation",
-            ],
-          },
-          claim: { type: "string" },
-          impact: { type: "string" },
-          evidenceSummary: { type: "string" },
-          caveat: { type: "string" },
+          required: [
+            "id",
+            "is_relevant",
+            "duplicateOfId",
+            "vendor",
+            "headline",
+            "summary",
+            "importance",
+            "audiences",
+            "category",
+            "rumorType",
+            "credibility",
+            "credibilityScore",
+            "evidenceBasis",
+            "claim",
+            "impact",
+            "evidenceSummary",
+            "caveat",
+          ],
         },
-        required: [
-          "id",
-          "is_relevant",
-          "duplicateOfId",
-          "vendor",
-          "headline",
-          "summary",
-          "importance",
-          "audiences",
-          "category",
-          "rumorType",
-          "credibility",
-          "credibilityScore",
-          "evidenceBasis",
-          "claim",
-          "impact",
-          "evidenceSummary",
-          "caveat",
-        ],
       },
     },
-  },
-  required: ["items"],
-};
+    required: ["items"],
+  };
+}
 
-const RUMOR_SYSTEM_INSTRUCTION = `You are an AI industry intelligence editor synthesizing raw rumors, leaks, insider scoops, research papers, and community threads into concise, processed intelligence briefings.
+const AI_RUMOR_BATCH_JSON_SCHEMA = buildRumorBatchSchema([
+  "new_model",
+  "new_feature",
+  "pricing",
+  "deprecation",
+  "coding_tool",
+  "bugfix",
+  "research",
+]);
+
+const HARDWARE_RUMOR_BATCH_JSON_SCHEMA = buildRumorBatchSchema([
+  "gpu_accelerator",
+  "cpu_silicon",
+  "memory_foundry",
+  "local_ai_hw",
+  "driver_runtime",
+  "benchmark",
+  "pricing",
+  "research",
+]);
+
+const AI_RUMOR_SYSTEM_INSTRUCTION = `You are an AI industry intelligence editor synthesizing raw rumors, leaks, insider scoops, research papers, and community threads into concise, processed intelligence briefings.
 
 Tasks for each candidate:
 1. Relevance & Deduplication:
@@ -154,6 +170,31 @@ Tasks for each candidate:
      - "high" (75-100): Verifiable code/UI artifacts, reproducible benchmarks, or multiple corroborating outlets.
      - "medium" (45-74): Plausible named-source reporting or strong technical analysis, still unconfirmed by vendor.
      - "low" (15-44): Anonymous single-source claims, vague hints, or speculative commentary.
+     - "unverified" (0-60): Early claim lacking corroboration or testable artifacts.
+   - evidenceBasis: "code_or_ui_artifact", "multiple_reports", "named_insider", "single_source", or "speculation".`;
+
+const HARDWARE_RUMOR_SYSTEM_INSTRUCTION = `You are a compute & AI silicon intelligence editor synthesizing hardware leaks, foundry & HBM supply-chain reports, driver/firmware discoveries, local inference hardware benchmarks, and silicon analysis into concise briefings.
+
+Tasks for each candidate:
+1. Relevance & Deduplication:
+   - Set is_relevant = false ONLY for spam, consumer gadgets unrelated to compute/AI/silicon (e.g., phone cases, game reviews, smart home TVs), or pure software news with no hardware/silicon relevance.
+   - Check recentRumors AND earlier items in the current batch. If this candidate reports on the SAME silicon SKU, foundry node, supply-chain report, driver leak, or hardware benchmark as an existing item, set duplicateOfId to that item's exact id (otherwise "").
+   - When duplicateOfId is non-empty, synthesize updated evidenceSummary, impact, credibility, credibilityScore, and caveat reflecting the added corroboration.
+2. Hardware Briefing Synthesis (do NOT merely copy the raw title):
+   - vendor: Primary silicon/hardware vendor ("NVIDIA", "AMD", "Apple", "Intel", "TSMC", "Arm", "Qualcomm", "Broadcom", "Groq", "Cerebras", "SK Hynix", "Samsung", "Micron", or "Industry").
+   - category: Choose the best fit from "gpu_accelerator", "cpu_silicon", "memory_foundry", "local_ai_hw", "driver_runtime", "benchmark", "pricing", or "research".
+   - headline: Rewrite into a crisp, neutral hardware intelligence headline (max 90 chars, no clickbait).
+   - summary: 2-3 tight, synthesized English bullet points capturing specs, memory/bandwidth, TDP, process node, pricing, or local AI performance implications.
+   - claim: 1 crisp sentence stating the core unconfirmed hardware/supply-chain/benchmark claim.
+   - impact: 1 concise sentence explaining why this matters for AI compute, training/inference clusters, or local workstation builders.
+   - evidenceSummary: 1-2 sentences evaluating the actual evidence (PCI IDs/driver commits, shipping manifests, die shots, benchmark logs, or industry reporting).
+   - caveat: 1 sentence stating what specs, pricing, timelines, or performance claims remain unconfirmed.
+3. Credibility Rubric:
+   - rumorType: "unreleased_leak" (PCI IDs, driver strings, BIOS/SKU leaks), "insider_report" (foundry/supply-chain press), "community_buzz" (HN/Phoronix/Lobsters), or "early_research" (architecture deep dives/papers).
+   - credibility & credibilityScore (0-100):
+     - "high" (75-100): Verifiable driver/kernel commits, shipping manifests, reproducible local benchmarks, or multiple corroborating outlets.
+     - "medium" (45-74): Plausible supply-chain/analyst reporting or strong microarchitecture analysis, awaiting vendor confirmation.
+     - "low" (15-44): Anonymous forum rumors, unverified TDP/clock leaks, or vague speculation.
      - "unverified" (0-60): Early claim lacking corroboration or testable artifacts.
    - evidenceBasis: "code_or_ui_artifact", "multiple_reports", "named_insider", "single_source", or "speculation".`;
 
@@ -182,6 +223,12 @@ function normalizeCategory(val: unknown, fallback: Category): Category {
     "coding_tool",
     "bugfix",
     "research",
+    "gpu_accelerator",
+    "cpu_silicon",
+    "memory_foundry",
+    "local_ai_hw",
+    "driver_runtime",
+    "benchmark",
   ];
   return typeof val === "string" && allowed.includes(val as Category)
     ? (val as Category)
@@ -263,7 +310,23 @@ function classifyByRules(
   }
 
   let category: Category = source.defaultCategory;
-  if (/\b(deprecat|sunset|retire|end of life)\b/.test(haystack)) {
+  if (source.domain === "hardware") {
+    if (/\b(hbm\d*|gddr|tsmc|cowos|wafer|foundry|2nm|3nm|packaging|dram)\b/.test(haystack)) {
+      category = "memory_foundry";
+    } else if (/\b(benchmark|tok\/s|throughput|latency|flops|tops|perf)\b/.test(haystack)) {
+      category = "benchmark";
+    } else if (/\b(mlx|mac\s*(studio|mini|pro)|local|workstation|quantiz|gguf|apple\s*silicon)\b/.test(haystack)) {
+      category = "local_ai_hw";
+    } else if (/\b(cuda|rocm|tensorrt|openvino|sglang|driver|kernel|runtime|compiler)\b/.test(haystack)) {
+      category = "driver_runtime";
+    } else if (/\b(cpu|epyc|ryzen|xeon|arm|snapdragon|m[3-9]\b)\b/.test(haystack)) {
+      category = "cpu_silicon";
+    } else if (/\b(gpu|blackwell|rubin|hopper|b200|gb200|instinct|rtx|radeon|tpu|npu|accelerator)\b/.test(haystack)) {
+      category = "gpu_accelerator";
+    } else if (/\b(pricing|price|cost|msrp)\b/.test(haystack)) {
+      category = "pricing";
+    }
+  } else if (/\b(deprecat|sunset|retire|end of life)\b/.test(haystack)) {
     category = "deprecation";
   } else if (/\b(pricing|price|cost|token|rate limit)\b/.test(haystack)) {
     category = "pricing";
@@ -279,11 +342,11 @@ function classifyByRules(
   }
 
   const audiences = new Set<Audience>(source.defaultAudiences);
-  if (/\b(api|sdk|cli|mcp|typescript|python|token|endpoint|webhook)\b/.test(haystack)) {
+  if (/\b(api|sdk|cli|mcp|typescript|python|token|endpoint|webhook|cuda|rocm|mlx|kernel|tensorrt|openvino)\b/.test(haystack)) {
     audiences.add("developer");
   }
   if (
-    /\b(chatgpt|claude\.ai|gemini app|workspace|assistant|search|image|voice|consumer)\b/.test(
+    /\b(chatgpt|claude\.ai|gemini app|workspace|assistant|search|image|voice|consumer|mac|workstation|geforce|radeon)\b/.test(
       haystack
     )
   ) {
@@ -318,7 +381,9 @@ function classifyByRules(
   }
 
   const devImpact = audiences.has("developer")
-    ? source.defaultCategory === "coding_tool"
+    ? source.domain === "hardware"
+      ? `Review ${source.name} release notes for driver, kernel, or inference runtime compatibility.`
+      : source.defaultCategory === "coding_tool"
       ? `Review ${source.name} release notes for SDK, CLI, or workflow changes.`
       : "Check model specifications, pricing, or API documentation updates."
     : undefined;
@@ -335,6 +400,23 @@ function classifyByRules(
 
 function inferVendorFromText(source: SourceConfig, text: string): string {
   const lower = text.toLowerCase();
+  if (source.domain === "hardware") {
+    if (/\b(nvidia|geforce|rtx|cuda|blackwell|rubin|hopper|b200|gb200|tensorrt|dgx)\b/.test(lower)) return "NVIDIA";
+    if (/\b(amd|radeon|instinct|rocm|ryzen|epyc|mi3\d\d|mi4\d\d)\b/.test(lower)) return "AMD";
+    if (/\b(apple|apple\s*silicon|mlx|mac\s*(studio|mini|pro|book)|m[3-9]\s*(pro|max|ultra)?)\b/.test(lower)) return "Apple";
+    if (/\b(intel|xeon|gaudi|openvino|arc)\b/.test(lower)) return "Intel";
+    if (/\b(tsmc|cowos)\b/.test(lower)) return "TSMC";
+    if (/\b(arm|cortex|neoverse)\b/.test(lower)) return "Arm";
+    if (/\b(qualcomm|snapdragon)\b/.test(lower)) return "Qualcomm";
+    if (/\b(broadcom)\b/.test(lower)) return "Broadcom";
+    if (/\b(groq)\b/.test(lower)) return "Groq";
+    if (/\b(cerebras)\b/.test(lower)) return "Cerebras";
+    if (/\b(sk\s*hynix)\b/.test(lower)) return "SK Hynix";
+    if (/\b(samsung)\b/.test(lower)) return "Samsung";
+    if (/\b(micron)\b/.test(lower)) return "Micron";
+    return source.vendor;
+  }
+
   if (/\b(openai|chatgpt|gpt-?\d|sora|codex)\b/.test(lower)) return "OpenAI";
   if (/\b(anthropic|claude)\b/.test(lower)) return "Anthropic";
   if (/\b(google|gemini|deepmind|veo|notebooklm)\b/.test(lower)) return "Google";
@@ -354,6 +436,7 @@ export function buildOfficialItem(source: SourceConfig, candidate: RawCandidate)
 
   return {
     id: candidate.externalId,
+    domain: source.domain ?? "ai",
     track: "official",
     sourceId: source.id,
     sourceName: source.name,
@@ -446,6 +529,7 @@ export function buildHeuristicRumorItem(source: SourceConfig, candidate: RawCand
 
   return {
     id: candidate.externalId,
+    domain: source.domain ?? "ai",
     track: "rumor",
     sourceId: source.id,
     sourceName: source.name,
@@ -496,7 +580,8 @@ function parseGeminiBatchJson(text: string): GeminiRumorItemResult[] {
 export async function evaluateRumorBatch(
   entries: Array<{ source: SourceConfig; candidate: RawCandidate }>,
   allowGemini: boolean,
-  existingRumors: ExistingRumorContext[] = []
+  existingRumors: ExistingRumorContext[] = [],
+  domain: Domain = "ai"
 ): Promise<{
   items: UpdateItem[];
   merges: RumorMerge[];
@@ -518,6 +603,11 @@ export async function evaluateRumorBatch(
       modelUsed: null,
     };
   }
+
+  const systemInstruction =
+    domain === "hardware" ? HARDWARE_RUMOR_SYSTEM_INSTRUCTION : AI_RUMOR_SYSTEM_INSTRUCTION;
+  const responseSchema =
+    domain === "hardware" ? HARDWARE_RUMOR_BATCH_JSON_SCHEMA : AI_RUMOR_BATCH_JSON_SCHEMA;
 
   const client = new GoogleGenAI({ apiKey });
   const results: UpdateItem[] = [];
@@ -542,7 +632,7 @@ export async function evaluateRumorBatch(
     try {
       const interaction = await client.interactions.create({
         model,
-        system_instruction: RUMOR_SYSTEM_INSTRUCTION,
+        system_instruction: systemInstruction,
         input: JSON.stringify(
           {
             recentRumors: knownContext.slice(0, 30),
@@ -555,7 +645,7 @@ export async function evaluateRumorBatch(
         response_format: {
           type: "text",
           mime_type: "application/json",
-          schema: RUMOR_BATCH_JSON_SCHEMA,
+          schema: responseSchema,
         },
       });
 

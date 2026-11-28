@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { APP_BUILD_ID } from "@/lib/build-info";
-import { SOURCES } from "@/lib/sources";
+import { getSourcesByDomain } from "@/lib/sources";
 import { readStore } from "@/lib/storage";
 import { getRumorEvaluatorInfo } from "@/lib/summarizer";
+import type { Domain } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
+  const domain: Domain = searchParams.get("domain") === "hardware" ? "hardware" : "ai";
   const track = searchParams.get("track");
   const audience = searchParams.get("audience");
   const importance = searchParams.get("importance");
@@ -17,7 +19,8 @@ export async function GET(request: NextRequest) {
   const sourceId = searchParams.get("sourceId");
   const q = searchParams.get("q")?.trim().toLowerCase() ?? "";
 
-  const [store, evaluator] = await Promise.all([readStore(), getRumorEvaluatorInfo()]);
+  const [store, evaluator] = await Promise.all([readStore(domain), getRumorEvaluatorInfo()]);
+  const domainSources = getSourcesByDomain(domain);
   let filtered = store.updates;
 
   if (track === "official" || track === "rumor") {
@@ -64,16 +67,17 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const vendors = Array.from(new Set(SOURCES.map((s) => s.vendor)));
+  const vendors = Array.from(new Set(domainSources.map((s) => s.vendor)));
 
   return NextResponse.json(
     {
+      domain,
       updates: filtered,
       lastSyncedAt: store.lastSyncedAt,
       syncLogs: store.syncLogs,
       total: filtered.length,
       vendors,
-      sources: SOURCES,
+      sources: domainSources,
       evaluator,
       buildId: APP_BUILD_ID,
     },

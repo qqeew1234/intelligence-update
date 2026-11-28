@@ -1,21 +1,26 @@
-import { NextResponse } from "next/server";
-import { SOURCES } from "@/lib/sources";
+import { NextRequest, NextResponse } from "next/server";
+import { getSourcesByDomain } from "@/lib/sources";
 import { readStore } from "@/lib/storage";
+import type { Domain } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const store = await readStore();
+export async function GET(request: NextRequest) {
+  const domain: Domain =
+    request.nextUrl.searchParams.get("domain") === "hardware" ? "hardware" : "ai";
+  const store = await readStore(domain);
   const logMap = new Map(store.syncLogs.map((log) => [log.sourceId, log]));
+  const domainSources = getSourcesByDomain(domain);
 
-  const sources = SOURCES.map((source) => ({
+  const sources = domainSources.map((source) => ({
     ...source,
     snapshot: store.snapshots[source.id] ?? null,
     lastReport: logMap.get(source.id) ?? null,
   }));
 
   return NextResponse.json({
+    domain,
     lastSyncedAt: store.lastSyncedAt,
     sources,
   });
