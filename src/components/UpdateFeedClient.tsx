@@ -670,7 +670,7 @@ export function UpdateFeedClient({
               }`}
             >
               <ShieldCheck className="h-4 w-4" />
-              <span>Official Updates</span>
+              <span>Official</span>
               <span
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
@@ -693,7 +693,7 @@ export function UpdateFeedClient({
               }`}
             >
               <Radar className="h-4 w-4" />
-              <span>Rumor Radar</span>
+              <span>Signals</span>
               <span
                 translate="no"
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
@@ -703,15 +703,6 @@ export function UpdateFeedClient({
                 }`}
               >
                 {rumorItems.length}
-              </span>
-              <span
-                className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:inline-block ${
-                  activeTrack === "rumor"
-                    ? "bg-amber-700/60 text-amber-50 dark:bg-neutral-950/15 dark:text-neutral-950"
-                    : "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/25"
-                }`}
-              >
-                AI Credibility &amp; Evidence
               </span>
             </button>
           </div>
@@ -801,7 +792,7 @@ export function UpdateFeedClient({
                 <select
                   value={rumorTypeFilter}
                   onChange={(e) => setRumorTypeFilter(e.target.value as "all" | RumorType)}
-                  aria-label="Filter by rumor type"
+                  aria-label="Filter by signal type"
                   className="glass-inset h-[38px] rounded-xl px-2.5 text-xs font-medium text-neutral-800 focus:border-neutral-400 focus:outline-none dark:text-neutral-200 dark:focus:border-white/30"
                 >
                   <option value="all" className="bg-white dark:bg-[#292a2d]">
@@ -833,10 +824,10 @@ export function UpdateFeedClient({
                   domain === "hardware"
                     ? activeTrack === "official"
                       ? "Search GPUs, chips, CUDA, ROCm, MLX..."
-                      : "Search silicon leaks, HBM, benchmarks..."
+                      : "Search silicon signals, HBM, benchmarks..."
                     : activeTrack === "official"
                     ? "Search models, features, SDKs..."
-                    : "Search rumors, claims, evidence..."
+                    : "Search signals, leaks, analysis..."
                 }
                 className="glass-inset h-[38px] w-full rounded-xl pl-8 pr-3 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-white/30"
               />
@@ -916,7 +907,7 @@ export function UpdateFeedClient({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="space-y-1">
               <p>
-                <strong>How Rumor Radar Works:</strong>{" "}
+                <strong>How Signals Works:</strong>{" "}
                 {domain === "hardware"
                   ? "Collects silicon/GPU leaks, foundry & HBM supply-chain reports, architecture deep dives, and community threads across "
                   : "Collects unconfirmed leaks, press scoops, early papers, and community threads across "}
@@ -944,7 +935,7 @@ export function UpdateFeedClient({
           <div className="glass-card rounded-3xl p-10 text-center">
             <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
               {(activeTrack === "official" ? officialItems.length : rumorItems.length) === 0
-                ? `No ${activeTrack === "official" ? "official updates" : "rumor signals"} collected yet.`
+                ? `No ${activeTrack === "official" ? "official updates" : "signals"} collected yet.`
                 : "No items match your active filters."}
             </p>
             <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -1277,7 +1268,7 @@ export function UpdateFeedClient({
 
             {[
               { title: `Official Sources (${officialSources.length})`, items: officialSources },
-              { title: `Rumor & Signal Sources (${rumorSources.length})`, items: rumorSources },
+              { title: `Signal Sources (${rumorSources.length})`, items: rumorSources },
             ].map((group) => (
               <div key={group.title} className="mt-4">
                 <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">

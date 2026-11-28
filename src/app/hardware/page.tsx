@@ -6,9 +6,9 @@ import { readStore } from "@/lib/storage";
 import { getRumorEvaluatorInfo } from "@/lib/summarizer";
 
 export const metadata: Metadata = {
-  title: "Hardware Intel — AI Silicon, GPU & Compute Radar",
+  title: "Hardware Intel — Official AI Silicon Releases & Signals",
   description:
-    "Official AI silicon, GPU, Apple Silicon, local LLM hardware releases and Gemini-evaluated hardware rumor radar.",
+    "Official AI silicon, GPU, Apple Silicon, local LLM hardware releases and Gemini-evaluated hardware signals.",
 };
 
 export const dynamic = "force-dynamic";

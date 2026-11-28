@@ -3,9 +3,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://intel.yunyun.page"),
-  title: "Intelligence Update — Real-Time AI Releases & Rumor Radar",
+  title: "Intelligence Update — Official AI Releases & Signals",
   description:
-    "Signal-first tracker for official AI updates, SDK releases, and Gemini-evaluated industry rumors.",
+    "Signal-first tracker for official AI releases, SDK updates, and Gemini-evaluated industry signals.",
   icons: {
     icon: [
       { url: "/favicon.ico?v=4", sizes: "any" },
